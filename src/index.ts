@@ -9,19 +9,35 @@ interface City {
     areaKm: number;
     totalPopulation: number;
     populationPerKm: number;
-    rankingInAreaInHa: number;
-    rankingInPopulation: number;
 }
 
 const voivodeships: { [name: string]: City[] } = {};
+
+// magic thing dont touch it, works.
+function formatName(input: string): string {
+    return input
+        .split(" ")
+        .map((part, index) => {
+            if (part.includes(".")) {
+                const dotIndex = part.indexOf(".") + 1;
+                if (dotIndex < part.length) {
+                    return part.substring(0, dotIndex) + part[dotIndex].toUpperCase() + part.substring(dotIndex + 1);
+                }
+            } else if (index > 0) {
+                return part.charAt(0).toUpperCase() + part.slice(1);
+            }
+            return part;
+        })
+        .join(" ");
+}
 
 async function parse() {
     const file = await readFile(join(import.meta.dir, "..", "data", "dane.csv"));
     const fileContent = file.toString();
 
-    let i = 0;
     let currentVoivodeship = "";
 
+    // == read all cities from file and sort them by voivodeship
     for (const line of fileContent.split("\n")) {
         const [
             identifier,
@@ -31,27 +47,27 @@ async function parse() {
             areaKm,
             totalPopulation,
             populationPerKm,
-            rankingInAreaInHa,
-            rankingInPopulation,
         ] = line.trim().split(",");
 
         if (identifier == "" && cityName !== "") {
-            const voivodeshipName = cityName.split("(")[0].trim();
+            if (currentVoivodeship !== "")
+                voivodeships[currentVoivodeship].sort((a, b) => b.totalPopulation - a.totalPopulation);
+
+            let voivodeshipName = formatName(cityName.split("(")[0].trim().toLocaleLowerCase());
             voivodeships[voivodeshipName] = [];
             currentVoivodeship = voivodeshipName;
+
             continue;
         }
 
         const cityObject: City = {
             identifier,
-            cityName,
-            powiat,
+            cityName: formatName(cityName),
+            powiat: formatName(powiat),
             areaHa: parseInt(areaHa),
             areaKm: parseInt(areaKm),
             totalPopulation: parseInt(totalPopulation),
             populationPerKm: parseInt(populationPerKm),
-            rankingInAreaInHa: parseInt(rankingInAreaInHa),
-            rankingInPopulation: parseInt(rankingInPopulation),
         };
 
         voivodeships[currentVoivodeship].push(cityObject);
