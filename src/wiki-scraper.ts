@@ -15,9 +15,12 @@ async function fetchHerb(cityName: string) {
 
     const media = await res.media();
 
-    const imageData = media.items.filter((x) => x.title.includes("_COA"))[0];
+    const imageData = media.items.filter((x) => new RegExp(/Herb|COA/g).test(x.title || ""));
 
-    return `https:${imageData.srcset[0].src}`;
+    if (!imageData[0])
+        throw new Error("Cannot find coats of arms on wiki page");
+
+    return `https:${imageData[0].srcset[0].src}`;
 }
 
 async function downloadFile(URL: string, cityName: string) {
