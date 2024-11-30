@@ -1,117 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
-import wiki from "wikipedia";
-
-interface City {
-    identifier: string;
-    cityName: string;
-    powiat: string;
-    areaHa: number;
-    areaKm: number;
-    totalPopulation: number;
-    populationPerKm: number;
-}
-
-const voivodeships: { [name: string]: City[] } = {};
-
-// fetches image from url and converts it to base64
-async function imageUrlToBase64(url: string) {
-    const response = await fetch(url);
-
-    const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-
-    return `data:image/png;base64,${base64}`;
-};
-
-// fetches herbs from wikimedia
-async function fetchHerb(cityName: string) {
-    const res = await wiki.page(cityName);
-
-    const { herb } = await res.infobox();
-
-    const media = await res.media();
-
-    const imageData = media.items.filter(x => x.title === `Plik:${herb.replaceAll(" ", "_")}`)[0];
-
-    return `https:${imageData.srcset[0].src}`;
-}
-
-// magic thing dont touch it, works.
-function formatName(input: string): string {
-    return input
-        .split(" ")
-        .map((part, index) => {
-            if (part.includes(".")) {
-                const dotIndex = part.indexOf(".") + 1;
-                if (dotIndex < part.length) {
-                    return (
-                        part.substring(0, dotIndex) +
-                        part[dotIndex].toUpperCase() +
-                        part.substring(dotIndex + 1)
-                    );
-                }
-            } else if (index > 0) {
-                return part.charAt(0).toUpperCase() + part.slice(1);
-            }
-            return part;
-        })
-        .join(" ");
-}
-
-async function parse() {
-    const file = await readFile(join(import.meta.dir, "..", "data", "dane.csv"));
-    const fileContent = file.toString();
-
-    let currentVoivodeship = "";
-
-    // == read all cities from file and sort them by voivodeship
-    for (const line of fileContent.split("\n")) {
-        const [
-            identifier,
-            cityName,
-            powiat,
-            areaHa,
-            areaKm,
-            totalPopulation,
-            populationPerKm,
-        ] = line.trim().split(",");
-
-        if (identifier == "" && cityName !== "") {
-            // sort voivodeship after it was proccessed
-            if (currentVoivodeship !== "")
-                voivodeships[currentVoivodeship].sort(
-                    (a, b) => b.totalPopulation - a.totalPopulation
-                );
-
-            let voivodeshipName = formatName(
-                cityName.split("(")[0].trim().toLocaleLowerCase()
-            );
-            voivodeships[voivodeshipName] = [];
-            currentVoivodeship = voivodeshipName;
-
-            continue;
-        }
-
-        const cityObject: City = {
-            identifier,
-            cityName: formatName(cityName),
-            powiat: formatName(powiat),
-            areaHa: parseInt(areaHa),
-            areaKm: parseInt(areaKm),
-            totalPopulation: parseInt(totalPopulation),
-            populationPerKm: parseInt(populationPerKm),
-        };
-
-        voivodeships[currentVoivodeship].push(cityObject);
-    }
-
-    // sort last voivodeship after everything was proccessed
-    voivodeships[currentVoivodeship].sort(
-        (a, b) => b.totalPopulation - a.totalPopulation
-    );
-}
 
 async function generatePresentation() {
     const presentation = new pptxgen();
@@ -193,11 +81,8 @@ async function generatePresentation() {
     });
 }
 
-async function setup() {
-    wiki.setLang("pl")
-    
-    await parse();
+async function main() {
     await generatePresentation();
 }
 
-await setup();
+await main();
