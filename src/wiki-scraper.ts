@@ -3,12 +3,9 @@ import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dataDirPath, parse, readData } from "./parser";
+import { error, log, ready, warn } from "./logger";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
-
-function log(str: string) {
-    console.log(`[${new Date().toLocaleTimeString()}] ${str}`);
-}
 
 async function fetchHerb(cityName: string) {
     const res = await wiki.page(cityName);
@@ -36,11 +33,11 @@ async function main() {
 
     try {
         if (!existsSync(downloadsPath)) {
-            console.warn(`Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
+            warn(`Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
             await mkdir(downloadsPath);
         }
     } catch (err) {
-        console.error("Couldn't create downloads directory, exiting");
+        error("Couldn't create downloads directory, exiting");
         return process.exit(1);
     }
 
@@ -74,12 +71,12 @@ async function main() {
                 try {
                     await downloadFile(herbSource, city.cityName);
 
-                    log(`Downloaded coats of arms for city: ${city.cityName}`);
+                    ready(`Downloaded coats of arms for city: ${city.cityName}`);
                 } catch (err) {
-                    console.error(`Couldn't download coat of arms for: ${city.cityName} (filename: ${herbSource}): ${err}`);
+                    error(`Couldn't download coat of arms for: ${city.cityName} (filename: ${herbSource}): ${err}`);
                 }
             } catch (err) {
-                console.error(`Couldn't fetch coat of arms for: ${city.cityName}: ${err}`);
+                error(`Couldn't fetch coat of arms for: ${city.cityName}: ${err}`);
             }
         }, Math.round(3600 / maxRequestsPerHour) * 1000);
     });
