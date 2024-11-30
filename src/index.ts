@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import pptxgen from "pptxgenjs";
+import wiki from "wikipedia";
 
 interface City {
     identifier: string;
@@ -13,6 +15,21 @@ interface City {
 
 const voivodeships: { [name: string]: City[] } = {};
 
+// fetches herbs from wikimedia
+async function fetchHerb(cityName: string) {
+    wiki.setLang("pl");
+
+    const res = await wiki.page(cityName);
+
+    const { herb } = await res.infobox();
+
+    const media = await res.media();
+
+    const imageData = media.items.filter(x => x.title === `Plik:${herb.replaceAll(" ", "_")}`)[0];
+
+    return `https:${imageData.srcset[0].src}`;
+}
+
 // magic thing dont touch it, works.
 function formatName(input: string): string {
     return input
@@ -21,7 +38,11 @@ function formatName(input: string): string {
             if (part.includes(".")) {
                 const dotIndex = part.indexOf(".") + 1;
                 if (dotIndex < part.length) {
-                    return part.substring(0, dotIndex) + part[dotIndex].toUpperCase() + part.substring(dotIndex + 1);
+                    return (
+                        part.substring(0, dotIndex) +
+                        part[dotIndex].toUpperCase() +
+                        part.substring(dotIndex + 1)
+                    );
                 }
             } else if (index > 0) {
                 return part.charAt(0).toUpperCase() + part.slice(1);
@@ -50,10 +71,15 @@ async function parse() {
         ] = line.trim().split(",");
 
         if (identifier == "" && cityName !== "") {
+            // sort voivodeship after it was proccessed
             if (currentVoivodeship !== "")
-                voivodeships[currentVoivodeship].sort((a, b) => b.totalPopulation - a.totalPopulation);
+                voivodeships[currentVoivodeship].sort(
+                    (a, b) => b.totalPopulation - a.totalPopulation
+                );
 
-            let voivodeshipName = formatName(cityName.split("(")[0].trim().toLocaleLowerCase());
+            let voivodeshipName = formatName(
+                cityName.split("(")[0].trim().toLocaleLowerCase()
+            );
             voivodeships[voivodeshipName] = [];
             currentVoivodeship = voivodeshipName;
 
@@ -72,9 +98,87 @@ async function parse() {
 
         voivodeships[currentVoivodeship].push(cityObject);
     }
+
+    // sort last voivodeship after everything was proccessed
+    voivodeships[currentVoivodeship].sort(
+        (a, b) => b.totalPopulation - a.totalPopulation
+    );
+}
+
+async function generatePresentation() {
+    const presentation = new pptxgen();
+    presentation.layout = "LAYOUT_16x9";
+
+    const titleSlide = presentation.addSlide();
+    titleSlide.addText("Wszystkie miasta Polski", {
+        align: "center",
+        valign: "middle",
+        x: 0,
+        y: 0,
+        h: "100%",
+        w: "100%",
+        fontSize: 36,
+        fontFace: "Work Sans",
+        bold: true,
+    });
+
+    let currentSlide: pptxgen.Slide;
+    let i = 0;
+
+    for (const voivodeshipName of Object.keys(voivodeships)) {
+        const voivodeshipTitleSlide = presentation.addSlide();
+        voivodeshipTitleSlide.addText(voivodeshipName, {
+            align: "center",
+            valign: "middle",
+            x: 0,
+            y: 0,
+            h: "100%",
+            w: "100%",
+            fontSize: 36,
+            fontFace: "Work Sans",
+            color: "#ffffff",
+            bold: true,
+        });
+        voivodeshipTitleSlide.background = { color: "#000000" };
+
+        voivodeships[voivodeshipName].forEach((city) => {
+            if (i % 5 == 0) currentSlide = presentation.addSlide();
+
+            currentSlide.background = { color: "#000000" };
+
+            const y = 1.125 * (i++ % 5);
+
+            // currentSlide.addImage({
+            //     data: 
+            // })
+
+            currentSlide.addShape(presentation.ShapeType.rect, {
+                x: 0,
+                y,
+                h: 1.125,
+                w: "100%",
+                fill: { color: "#0f0f0f" }
+            });
+
+            currentSlide.addText(city.cityName, {
+                valign: "middle",
+                x: 0,
+                y,
+                h: 1.125,
+                w: "40%",
+                fontSize: 14,
+                color: "#ffffff",
+            });
+        });
+    }
+
+    await presentation.writeFile({
+        fileName: join(import.meta.dir, "..", "data", "presentation.pptx"),
+    });
 }
 
 await parse();
+await generatePresentation();
 
 await writeFile(
     join(import.meta.dir, "..", "data", "out.json"),
