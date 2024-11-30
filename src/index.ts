@@ -15,10 +15,18 @@ interface City {
 
 const voivodeships: { [name: string]: City[] } = {};
 
+// fetches image from url and converts it to base64
+async function imageUrlToBase64(url: string) {
+    const response = await fetch(url);
+
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+
+    return `data:image/png;base64,${base64}`;
+};
+
 // fetches herbs from wikimedia
 async function fetchHerb(cityName: string) {
-    wiki.setLang("pl");
-
     const res = await wiki.page(cityName);
 
     const { herb } = await res.infobox();
@@ -141,18 +149,14 @@ async function generatePresentation() {
         });
         voivodeshipTitleSlide.background = { color: "#000000" };
 
-        voivodeships[voivodeshipName].forEach((city) => {
+        for await (const city of voivodeships[voivodeshipName]) {
             if (i % 5 == 0) currentSlide = presentation.addSlide();
 
-            currentSlide.background = { color: "#000000" };
+            currentSlide!.background = { color: "#000000" };
 
             const y = 1.125 * (i++ % 5);
 
-            // currentSlide.addImage({
-            //     data: 
-            // })
-
-            currentSlide.addShape(presentation.ShapeType.rect, {
+            currentSlide!.addShape(presentation.ShapeType.rect, {
                 x: 0,
                 y,
                 h: 1.125,
@@ -160,7 +164,7 @@ async function generatePresentation() {
                 fill: { color: "#0f0f0f" }
             });
 
-            currentSlide.addText(city.cityName, {
+            currentSlide!.addText(city.cityName, {
                 valign: "middle",
                 x: 0,
                 y,
@@ -169,7 +173,19 @@ async function generatePresentation() {
                 fontSize: 14,
                 color: "#ffffff",
             });
-        });
+
+            // console.log("Processing image for: ", city.cityName)
+
+            // const imageURL = await fetchHerb(city.cityName);
+            // const res = await imageUrlToBase64(imageURL);
+
+            // currentSlide!.addImage({
+            //     data: res,
+            //     h: 0.875,
+            //     y: y + 0.125,
+            //     x: 8
+            // })
+        };
     }
 
     await presentation.writeFile({
@@ -177,11 +193,11 @@ async function generatePresentation() {
     });
 }
 
-await parse();
-await generatePresentation();
+async function setup() {
+    wiki.setLang("pl")
+    
+    await parse();
+    await generatePresentation();
+}
 
-await writeFile(
-    join(import.meta.dir, "..", "data", "out.json"),
-    JSON.stringify(voivodeships, null, 4),
-    { encoding: "utf-8" }
-);
+await setup();
