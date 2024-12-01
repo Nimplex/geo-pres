@@ -3,7 +3,7 @@ export function log(...message: any) {
 }
 
 export function error(...message: any) {
-    console.log(`[${new Date().toLocaleTimeString()}] \x1b[31m[92m${message.join("\t")}\x1b[m`)
+    console.error(`[${new Date().toLocaleTimeString()}] \x1b[31m${message.join("\t")}\x1b[m`)
 }
 
 export function ready(...message: any) {
@@ -11,5 +11,5 @@ export function ready(...message: any) {
 }
 
 export function warn(...message: any) {
-    console.log(`[${new Date().toLocaleTimeString()}] \x1b[93m${message.join("\t")}\x1b[m`)
+    console.warn(`[${new Date().toLocaleTimeString()}] \x1b[93m${message.join("\t")}\x1b[m`)
 }

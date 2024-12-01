@@ -52,7 +52,7 @@ export function parse(data: string) {
 
         const cityObject: City = {
             identifier,
-            cityName: formatName(cityName),
+            cityName: cityName,
             powiat: formatName(powiat),
             areaHa: parseInt(areaHa),
             areaKm: parseInt(areaKm),
