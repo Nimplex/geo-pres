@@ -1,7 +1,11 @@
+// it's so bad and horyfingly slow, sorry for that mess, I'm to tired to fix something that is just made as utility for school project
+// after 10 hours of fixing edge-cases I can finally put my keyboard to rest and go wash my eyes with soap
+// this piece of code should be considered a crime agains humanity, sorry for everyone that will ever read this
+
 import wiki, { Page, type mediaResult } from "wikipedia";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, read, readdirSync } from "node:fs";
 import { dataDirPath, parse, readData } from "./parser";
 import { error, log, ready, warn } from "./logger";
 import { levenshtein } from "./levenshtein_distance";
@@ -24,9 +28,11 @@ async function fetchHerb(cityName: string) {
 
         const suggestedPageTitle = searchRes.results[i++].title as string;
 
-        if (suggestedPageTitle.toLowerCase().includes("stacja kolejowa")) continue;
+        if (!suggestedPageTitle.startsWith(cityName) || new RegExp(/stacja kolejowa|gmina/g).test(suggestedPageTitle.toLowerCase())) continue;
 
         cityRes = await wiki.page(suggestedPageTitle);
+
+        if (new RegExp(/Dawne/g).test((await cityRes.categories()).join(" "))) continue;
 
         if (new RegExp(/Strony ujednoznaczniające/g).test((await cityRes.categories()).join(" "))) {
             warn("Detected link list!");
@@ -51,19 +57,25 @@ async function fetchHerb(cityName: string) {
         }
 
         const infobox = await cityRes.infobox();
+
         if (infobox && infobox.nazwaOryginalna && infobox.nazwaOryginalna != cityName) continue;
+        if (infobox && infobox.nazwa && infobox.nazwa != cityName) continue;
 
-        let splittedCitySummary = (await cityRes.summary()).extract.toLowerCase().split("–");
+        const summary = await cityRes.summary();
 
-        if (splittedCitySummary[0].startsWith(cityName.toLowerCase())) {
+        if (summary.extract.toLowerCase().includes("wieś")) continue;
+
+        let splittedCitySummary = summary.extract.toLowerCase().split("–");
+
+        if (splittedCitySummary[0].trim().startsWith(cityName.toLowerCase())) {
             if (new RegExp(/miasto/).test(splittedCitySummary.slice(1).join("–"))) {
                 break;
             }
         }
 
-        splittedCitySummary = (await cityRes.summary()).extract.toLowerCase().split("-");
+        splittedCitySummary = summary.extract.toLowerCase().split("-");
 
-        if (splittedCitySummary[0].startsWith(cityName.toLowerCase())) {
+        if (splittedCitySummary[0].trim().startsWith(cityName.toLowerCase())) {
             if (new RegExp(/miasto/).test(splittedCitySummary.slice(1).join("-"))) {
                 break;
             }
@@ -214,9 +226,11 @@ async function main() {
 }
 
 // ignore that, just for development purposees, some of more tricky ones
+// hall of shame, I had to write so many edge cases because of these
 async function test() {
     wiki.setLang("pl");
 
+    log(await fetchHerb("Żychlin"));
     log(await fetchHerb("Nowe Miasto"));
     log(await fetchHerb("Nowe Miasto Lubawskie"));
     log(await fetchHerb("Nowe Miasto nad Pilicą"));
@@ -230,6 +244,12 @@ async function test() {
     log(await fetchHerb("Jawor"));
     log(await fetchHerb("Węgorzyno"));
     log(await fetchHerb("Zwoleń"));
+    log(await fetchHerb("Świeradów-Zdrój"));
+    log(await fetchHerb("Mrocza"));
+    log(await fetchHerb("Stoczek Łukowski"));
+    log(await fetchHerb("Lubsko"));
+
+    ready("All tests passed =)")
 }
 
 // await test();
