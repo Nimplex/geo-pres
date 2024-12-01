@@ -1,144 +1,17 @@
-// it's so bad and horyfingly slow, sorry for that mess, I'm to tired to fix something that is just made as utility for school project
-// after 10 hours of fixing edge-cases I can finally put my keyboard to rest and go wash my eyes with soap
-// this piece of code should be considered a crime agains humanity, sorry for everyone that will ever read this
-
-import wiki, { Page, type mediaResult } from "wikipedia";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync, read, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dataDirPath, parse, readData } from "./parser";
 import { error, log, ready, warn } from "./logger";
-import { levenshtein } from "./levenshtein_distance";
+import type { City } from "./types";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
 
-async function fetchHerb(cityName: string) {
-    const searchRes = await wiki.search(cityName);
+async function fetchHerb(city: City): Promise<string> {
+	if (!city.voivodeship)
+		throw new Error("No voivodeship parameter set");
 
-    searchRes.results.reverse();
-
-    if (!searchRes.results[0]) throw new Error("Cannot find city wiki page");
-
-    let i = 0;
-
-    let cityRes: Page | null = null;
-
-    while (true) {
-        if (i > searchRes.results.length - 1) throw new Error("Cannot find city wiki page");
-
-        const suggestedPageTitle = searchRes.results[i++].title as string;
-
-        if (!suggestedPageTitle.startsWith(cityName) || new RegExp(/stacja kolejowa|gmina/g).test(suggestedPageTitle.toLowerCase())) continue;
-
-        cityRes = await wiki.page(suggestedPageTitle);
-
-        if (new RegExp(/Dawne/g).test((await cityRes.categories()).join(" "))) continue;
-
-        if (new RegExp(/Strony ujednoznaczniające/g).test((await cityRes.categories()).join(" "))) {
-            warn("Detected link list!");
-
-            const pageContent = (await cityRes.html())
-                .split("\n")
-                .filter((line) => new RegExp(/miasto w.*?woj/g).test(line));
-            if (!pageContent[0]) continue;
-
-            const exprRes = new RegExp(/href="([^"]+)"/g).exec(pageContent[0]);
-            if (!exprRes || !exprRes[0]) continue;
-
-            warn("This one was tricky, had to go through link list");
-
-            cityRes = await wiki.page(decodeURI(exprRes[0].replaceAll(/href=|["]|\/wiki|[/]/g, "")));
-
-            break;
-        }
-
-        if (!cityRes.title.startsWith(cityName)) {
-            continue;
-        }
-
-        const infobox = await cityRes.infobox();
-
-        if (infobox && infobox.nazwaOryginalna && infobox.nazwaOryginalna != cityName) continue;
-        if (infobox && infobox.nazwa && infobox.nazwa != cityName) continue;
-
-        const summary = await cityRes.summary();
-
-        if (summary.extract.toLowerCase().includes("wieś")) continue;
-
-        let splittedCitySummary = summary.extract.toLowerCase().split("–");
-
-        if (splittedCitySummary[0].trim().startsWith(cityName.toLowerCase())) {
-            if (new RegExp(/miasto/).test(splittedCitySummary.slice(1).join("–"))) {
-                break;
-            }
-        }
-
-        splittedCitySummary = summary.extract.toLowerCase().split("-");
-
-        if (splittedCitySummary[0].trim().startsWith(cityName.toLowerCase())) {
-            if (new RegExp(/miasto/).test(splittedCitySummary.slice(1).join("-"))) {
-                break;
-            }
-        }
-    }
-
-    if (!cityRes) throw new Error("Cannot find city wiki page");
-
-    // first check if there's image available in infobox
-    const infobox = await cityRes.infobox();
-    let infoboxHerb = (infobox.herb as string | null)?.replaceAll(" ", "_");
-
-    const media = await cityRes.media();
-
-    if (infoboxHerb) {
-        const url = media.items.filter((item) => {
-            if (!item.title) return false;
-            return item?.title.includes(infoboxHerb);
-        })[0].srcset[0].src;
-
-        return "https:" + url;
-    }
-
-    // if not then do this:
-    const imageData = media.items.filter((item) => {
-        if (!item.title) return false;
-
-        return new RegExp(/herb|coa/g).test(item.title.toLowerCase());
-    });
-
-    let selected: mediaResult | null = null;
-
-    // there can be many "Herb" "Coats of arms" on one page, such as city coats
-    // of arms and voivodesip coats of arms, so we need to determine which one
-    // we want to use
-    for (const image of imageData) {
-        if (!image.title) continue;
-
-        // remove all crap from file title so we can get closer matches to real images
-        // also this match could be a problem if there was a city in Poland with "gm"
-        // in its name, but fortunately there aren't any
-        const bannedExpr = new RegExp(/herb|gm|gmina/);
-        const toReplace = new RegExp(/plik:|file|.svg|.(?<=_)coa|\([^()]*\)|pol(?=_)./g);
-        const extractedTitle = image.title
-            .toLowerCase()
-            .replaceAll(toReplace, "")
-            .split("_")
-            .filter((part) => !bannedExpr.test(part))
-            .join("_");
-
-        const similarity = levenshtein(extractedTitle, cityName);
-
-        if (similarity < 40) continue;
-
-        selected = image;
-        warn(`Selected one image for ${cityName}, extracted title: ${extractedTitle} (similarity: ${similarity})`);
-
-        break;
-    }
-
-    if (!imageData[0] || !selected) throw new Error("Cannot find coats of arms on wiki page: " + cityRes.fullurl);
-
-    return `https:${imageData[0].srcset[0].src}`;
+	return city.cityName;
 }
 
 async function downloadFile(URL: string, cityName: string) {
@@ -150,8 +23,6 @@ async function downloadFile(URL: string, cityName: string) {
 }
 
 async function main() {
-    wiki.setLang("pl");
-
     try {
         if (!existsSync(downloadsPath)) {
             warn(`Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
@@ -165,9 +36,10 @@ async function main() {
     const data = await readData();
     const voivodeships = parse(data);
 
-    let cities = Object.values(voivodeships).flat();
+    let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
     const originalSize = cities.length;
 
+    /* reimplement, misses few cities
     try {
         const files = readdirSync(downloadsPath).map((filename) =>
             filename.replaceAll(".png", "").replaceAll("+", " ")
@@ -176,6 +48,7 @@ async function main() {
     } catch (err) {
         error(`Couldn't read ${downloadsPath} for existing coats of arms`);
     }
+    */
 
     log("This program is designed not to exceed ratelimits of wikipedia");
     log(`There are ${originalSize} cities in data file`);
@@ -194,7 +67,7 @@ async function main() {
         log(`Scraping ${city.cityName}`);
 
         try {
-            const herbSource = await fetchHerb(city.cityName);
+            const herbSource = await fetchHerb(city);
 
             log(`Coats of arms for: ${city.cityName} found: "${herbSource}", downloading`);
 
@@ -225,32 +98,4 @@ async function main() {
     );
 }
 
-// ignore that, just for development purposees, some of more tricky ones
-// hall of shame, I had to write so many edge cases because of these
-async function test() {
-    wiki.setLang("pl");
-
-    log(await fetchHerb("Żychlin"));
-    log(await fetchHerb("Nowe Miasto"));
-    log(await fetchHerb("Nowe Miasto Lubawskie"));
-    log(await fetchHerb("Nowe Miasto nad Pilicą"));
-    log(await fetchHerb("Goraj"));
-    log(await fetchHerb("Siedliszcze"));
-    log(await fetchHerb("Wrocław"));
-    log(await fetchHerb("Wałbrzych"));
-    log(await fetchHerb("Lubań"));
-    log(await fetchHerb("Jarosław"));
-    log(await fetchHerb("Ujazd"));
-    log(await fetchHerb("Jawor"));
-    log(await fetchHerb("Węgorzyno"));
-    log(await fetchHerb("Zwoleń"));
-    log(await fetchHerb("Świeradów-Zdrój"));
-    log(await fetchHerb("Mrocza"));
-    log(await fetchHerb("Stoczek Łukowski"));
-    log(await fetchHerb("Lubsko"));
-
-    ready("All tests passed =)")
-}
-
-// await test();
 await main();

@@ -6,4 +6,5 @@ export interface City {
     areaKm: number;
     totalPopulation: number;
     populationPerKm: number;
+    voivodeship?: string;
 }
