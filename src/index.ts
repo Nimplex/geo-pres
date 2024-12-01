@@ -52,7 +52,7 @@ async function generatePresentation() {
                 fill: { color: "#0f0f0f" }
             });
 
-            currentSlide!.addText(city.cityName, {
+            currentSlide!.addText(city.name, {
                 valign: "middle",
                 x: 0,
                 y,
@@ -62,9 +62,9 @@ async function generatePresentation() {
                 color: "#ffffff",
             });
 
-            // console.log("Processing image for: ", city.cityName)
+            // console.log("Processing image for: ", city.name)
 
-            // const imageURL = await fetchHerb(city.cityName);
+            // const imageURL = await fetchHerb(city.name);
             // const res = await imageUrlToBase64(imageURL);
 
             // currentSlide!.addImage({

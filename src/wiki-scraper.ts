@@ -2,34 +2,46 @@ import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { dataDirPath, parse, readData } from "./parser";
-import { error, log, ready, warn } from "./logger";
+import { log } from "./logger";
+import { LogStyle } from "./logger";
 import type { City } from "./types";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
 
-async function fetchHerb(city: City): Promise<string> {
-	if (!city.voivodeship)
-		throw new Error("No voivodeship parameter set");
-
-	return city.cityName;
-}
-
 async function downloadFile(URL: string, cityName: string) {
     const res = await fetch(URL);
 
+    if (res.status !== 200)
+        log([LogStyle.red, LogStyle.bold], `ERROR ${res.status}`, `Couldn't download COA for ${cityName}`);
+
     const buffer = await res.arrayBuffer();
 
-    await writeFile(join(downloadsPath, cityName.replaceAll(" ", "+") + ".png"), Buffer.from(buffer));
+    return await writeFile(join(downloadsPath, cityName.replaceAll(" ", "_") + ".png"), Buffer.from(buffer));
+}
+
+async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
+    const cityLink = cityName.replaceAll(" ", "_") + suffix;
+    let response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
+    if (response.status === 404) {
+        throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
+    }
+
+    let result = regex.exec(await response.text());
+    if (!result) {
+        throw new Error(`No COA: \x1b[1m${cityLink.padStart(45, " ")}\x1b[m, trying next...`);
+    }
+    log([LogStyle.bold, LogStyle.green], `HIT ${`${index}/${total}`.padStart(11, " ")}`, `${cityLink}`.padStart(53, " "), `, ${result[1].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`)
+    return `https:${result[1]}`;
 }
 
 async function main() {
     try {
         if (!existsSync(downloadsPath)) {
-            warn(`Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
+            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
             await mkdir(downloadsPath);
         }
     } catch (err) {
-        error("Couldn't create downloads directory, exiting");
+        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
         return process.exit(1);
     }
 
@@ -37,65 +49,56 @@ async function main() {
     const voivodeships = parse(data);
 
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
-    const originalSize = cities.length;
+    const totalEntries = cities.length;
 
-    /* reimplement, misses few cities
-    try {
-        const files = readdirSync(downloadsPath).map((filename) =>
-            filename.replaceAll(".png", "").replaceAll("+", " ")
-        );
-        cities = cities.filter((city) => !files.includes(city.cityName));
-    } catch (err) {
-        error(`Couldn't read ${downloadsPath} for existing coats of arms`);
-    }
-    */
+    let downloads = [];
+    let errors = 0;
 
-    log("This program is designed not to exceed ratelimits of wikipedia");
-    log(`There are ${originalSize} cities in data file`);
+    let foundCities = {};
+    cities.forEach(city => {
+        foundCities[city.name] ? foundCities[city.name]++ : foundCities[city.name] = 1;
+    })
 
-    if (cities.length != originalSize)
-        warn(`Found ${originalSize - cities.length} existing coats of arms, downloading missing ${cities.length}`);
+    cities.filter(city => foundCities[city.name] > 1).forEach(city => {
+        city.repeating = true;
+    })
 
-    let cityIndex = 0;
-    let failed = 0;
+    for (const [index, city] of cities.entries()) {
+        let found = false;
+        let hitnum = 1;
+        if (city.repeating)
+            log([LogStyle.yellow, LogStyle.bold], "REPEATING", `Downloading city '${city.name}' in reverse suffix order, because it repeats in the data set`);
+        for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
+            for (const suffix of city.repeating
+                ? [`_(powiat ${city.powiat})`, `_(województwo_${city.voivodeship})`, "_(miasto)", ""]
+                : ["", "_(miasto)", `_(województwo_${city.voivodeship})`, `_(powiat_${city.powiat})`]
+            ) {
+                let err = undefined;
+                const result = await tryPage(city.name, suffix, regex, index + 1, totalEntries).catch(err => {
+                    log([LogStyle.yellow], `NO HIT (#${hitnum++})`, err.message);
+                });
 
-    async function next() {
-        const city = cities[cityIndex++]; // also increment index
+                if (!result)
+                    continue;
 
-        if (!city) return true;
-
-        log(`Scraping ${city.cityName}`);
-
-        try {
-            const herbSource = await fetchHerb(city);
-
-            log(`Coats of arms for: ${city.cityName} found: "${herbSource}", downloading`);
-
-            try {
-                await downloadFile(herbSource, city.cityName);
-
-                ready(`Downloaded coats of arms for: ${city.cityName}`);
-            } catch (err) {
-                error(`Couldn't download coats of arms for: ${city.cityName} (filename: ${herbSource}): ${err}`);
-                failed++;
+                found = true;
+                hitnum = 1;
+                downloads.push(downloadFile(result, `${city.identifier}+${city.name}`));
+                break;
             }
-        } catch (err) {
-            error(`Couldn't fetch coats of arms for: ${city.cityName}: ${err}`);
-            failed++;
+
+            if (found)
+                break;
         }
 
-        return false;
-    }
+        if (found)
+            continue;
 
-    while (cityIndex != cities.length) {
-        if (await next()) break;
+        log([LogStyle.bold, LogStyle.red], "ERROR", `No result found for ${city.name}`);
+        errors++;
     }
-
-    log(
-        `Scraping finished, \x1b[92m${cityIndex - failed} scraped\x1b[m, \x1b[31m${failed} failed\x1b[m, ${Math.round(
-            (failed / cityIndex) * 100
-        )}% loss`
-    );
+    await Promise.all(downloads); // just in case
+    log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${totalEntries - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`)
 }
 
 await main();

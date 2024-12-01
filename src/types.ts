@@ -1,6 +1,6 @@
 export interface City {
     identifier: string;
-    cityName: string;
+    name: string;
     powiat: string;
     areaHa: number;
     areaKm: number;

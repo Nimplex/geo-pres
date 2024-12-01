@@ -1,15 +1,14 @@
-export function log(...message: any) {
-    console.log(`[${new Date().toLocaleTimeString()}] ${message.join("\t")}`);
+export function log(style: LogStyle[], prefix: string, ...message: any) {
+    console.log(`[\x1b[${style.join(";")}m${prefix.padEnd(15, " ")}\x1b[m] ${message.join("")}`);
 }
 
-export function error(...message: any) {
-    console.error(`[${new Date().toLocaleTimeString()}] \x1b[31m${message.join("\t")}\x1b[m`)
-}
-
-export function ready(...message: any) {
-    console.log(`[${new Date().toLocaleTimeString()}] \x1b[92m${message.join("\t")}\x1b[m`)
-}
-
-export function warn(...message: any) {
-    console.warn(`[${new Date().toLocaleTimeString()}] \x1b[93m${message.join("\t")}\x1b[m`)
+export enum LogStyle {
+    bold = 1,
+    italic = 3,
+    red = 31,
+    green = 32,
+    yellow = 33,
+    blue = 34,
+    purple = 35,
+    cyan = 36,
 }
