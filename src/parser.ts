@@ -1,11 +1,12 @@
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import type { City } from "./types";
+import { LogStyle, log } from "./logger";
+import type { City, Voivodeship, Map } from "./types";
 
 export const dataDirPath = join(import.meta.dir, "..", "data");
 
 export function parse(data: string) {
-    const voivodeships: { [name: string]: City[] } = {};
+    const voivodeships: Map<Voivodeship> = {};
 
     let currentVoivodeship = "";
 
@@ -20,11 +21,15 @@ export function parse(data: string) {
                 voivodeships[currentVoivodeship].sort((a, b) => b.totalPopulation - a.totalPopulation);
 
             // parse name and set it
-            // let voivodeshipName = formatName(name.split("(")[0].trim().toLocaleLowerCase());
-            let voivodeshipName = /woj\. (.+?)  /.exec(name.toLocaleLowerCase())[1];
+            let voivodeshipName = /woj\. (.+?)  /.exec(name.toLocaleLowerCase());
+
+            if (!voivodeshipName || !voivodeshipName[1]) {
+                log([LogStyle.red], `Error while parsing ${line}, voivodeship name not found`);
+                continue;
+            }
             
-            voivodeships[voivodeshipName] = [];
-            currentVoivodeship = voivodeshipName;
+            voivodeships[voivodeshipName[1]] = [];
+            currentVoivodeship = voivodeshipName[1];
 
             continue;
         }

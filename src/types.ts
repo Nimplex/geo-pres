@@ -7,4 +7,11 @@ export interface City {
     totalPopulation: number;
     populationPerKm: number;
     voivodeship?: string;
+    repeating?: boolean;
 }
+
+export type Voivodeship = City[];
+
+export type Map<T> = {
+    [name: string]: T
+};

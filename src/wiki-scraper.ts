@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readdirSync } from "node:fs";
-import { dataDirPath, parse, readData } from "./parser";
+import { existsSync } from "node:fs";
+import { dataDirPath } from "./parser";
 import { log } from "./logger";
 import { LogStyle } from "./logger";
-import type { City } from "./types";
+import type { Map, Voivodeship } from "./types";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
 
@@ -22,6 +22,7 @@ async function downloadFile(URL: string, cityName: string) {
 async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
     const cityLink = cityName.replaceAll(" ", "_") + suffix;
     let response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
+    
     if (response.status === 404) {
         throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
     }
@@ -30,11 +31,13 @@ async function tryPage(cityName: string, suffix: string, regex: RegExp, index: n
     if (!result) {
         throw new Error(`No COA: \x1b[1m${cityLink.padStart(45, " ")}\x1b[m, trying next...`);
     }
+
     log([LogStyle.bold, LogStyle.green], `HIT ${`${index}/${total}`.padStart(11, " ")}`, `${cityLink}`.padStart(53, " "), `, ${result[1].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`)
+
     return `https:${result[1]}`;
 }
 
-async function main() {
+export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     try {
         if (!existsSync(downloadsPath)) {
             log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
@@ -44,36 +47,34 @@ async function main() {
         log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
         return process.exit(1);
     }
-
-    const data = await readData();
-    const voivodeships = parse(data);
-
+ 
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
     const totalEntries = cities.length;
 
     let downloads = [];
     let errors = 0;
 
-    let foundCities = {};
+    let foundCities: Map<number> = {};
     cities.forEach(city => {
         foundCities[city.name] ? foundCities[city.name]++ : foundCities[city.name] = 1;
-    })
+    });
 
     cities.filter(city => foundCities[city.name] > 1).forEach(city => {
         city.repeating = true;
-    })
+    });
 
     for (const [index, city] of cities.entries()) {
         let found = false;
         let hitnum = 1;
+
         if (city.repeating)
             log([LogStyle.yellow, LogStyle.bold], "REPEATING", `Downloading city '${city.name}' in reverse suffix order, because it repeats in the data set`);
-        for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
+
+	for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
             for (const suffix of city.repeating
                 ? [`_(powiat ${city.powiat})`, `_(województwo_${city.voivodeship})`, "_(miasto)", ""]
                 : ["", "_(miasto)", `_(województwo_${city.voivodeship})`, `_(powiat_${city.powiat})`]
             ) {
-                let err = undefined;
                 const result = await tryPage(city.name, suffix, regex, index + 1, totalEntries).catch(err => {
                     log([LogStyle.yellow], `NO HIT (#${hitnum++})`, err.message);
                 });
@@ -95,10 +96,10 @@ async function main() {
             continue;
 
         log([LogStyle.bold, LogStyle.red], "ERROR", `No result found for ${city.name}`);
-        errors++;
+
+	errors++;
     }
+
     await Promise.all(downloads); // just in case
     log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${totalEntries - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`)
 }
-
-await main();

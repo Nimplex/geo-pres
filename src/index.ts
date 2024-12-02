@@ -1,7 +1,10 @@
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
+import { parse, readData } from "./parser"; 
+import { scrapeWiki } from "./wiki-scraper";
+import type { Map, Voivodeship } from "./types";
 
-async function generatePresentation() {
+async function generatePresentation(voivodeships: Map<Voivodeship>) {
     const presentation = new pptxgen();
     presentation.layout = "LAYOUT_16x9";
 
@@ -82,7 +85,11 @@ async function generatePresentation() {
 }
 
 async function main() {
-    await generatePresentation();
+    const data = await readData();
+    const voivodeships = parse(data);
+
+    await scrapeWiki(voivodeships);
+    await generatePresentation(voivodeships);
 }
 
 await main();
