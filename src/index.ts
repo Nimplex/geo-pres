@@ -1,8 +1,16 @@
+import { readFile } from "node:fs/promises"
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 import { parse, readData } from "./parser"; 
-import { scrapeWiki } from "./wiki-scraper";
-import type { Map, Voivodeship } from "./types";
+import { downloadsPath, formatFileName, scrapeWiki } from "./wiki-scraper";
+import type { City, Map, Voivodeship } from "./types";
+
+async function readHerb(city: City) {
+    const file = await readFile(join(downloadsPath, `${formatFileName(city)}.png`.replaceAll(" ", "_")));
+    const content = file.toString("base64");
+
+    return content;
+}
 
 async function generatePresentation(voivodeships: Map<Voivodeship>) {
     const presentation = new pptxgen();
@@ -21,11 +29,12 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
         bold: true,
     });
 
-    let currentSlide: pptxgen.Slide;
-    let i = 0;
-
     for (const voivodeshipName of Object.keys(voivodeships)) {
+        let i = 0;
+        let currentSlide: pptxgen.Slide;
+
         const voivodeshipTitleSlide = presentation.addSlide();
+
         voivodeshipTitleSlide.addText(voivodeshipName, {
             align: "center",
             valign: "middle",
@@ -38,9 +47,10 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
             color: "#ffffff",
             bold: true,
         });
+
         voivodeshipTitleSlide.background = { color: "#000000" };
 
-        for await (const city of voivodeships[voivodeshipName]) {
+        for (const city of voivodeships[voivodeshipName]) {
             if (i % 5 == 0) currentSlide = presentation.addSlide();
 
             currentSlide!.background = { color: "#000000" };
@@ -57,7 +67,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             currentSlide!.addText(city.name, {
                 valign: "middle",
-                x: 0,
+                x: 0.3,
                 y,
                 h: 1.125,
                 w: "40%",
@@ -65,17 +75,25 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-            // console.log("Processing image for: ", city.name)
+            currentSlide!.addText(city.totalPopulation.toString(), {
+                valign: "middle",
+                x: 1.5,
+                y,
+                h: 1.125,
+                w: "40%",
+                fontSize: 14,
+                color: "#ffffff",
+            });
 
-            // const imageURL = await fetchHerb(city.name);
-            // const res = await imageUrlToBase64(imageURL);
+            const herbData = await readHerb(city);
 
-            // currentSlide!.addImage({
-            //     data: res,
-            //     h: 0.875,
-            //     y: y + 0.125,
-            //     x: 8
-            // })
+            currentSlide!.addImage({
+                data: `data:image/png;base64,${herbData}`,
+                h: 0.875,
+                w: 0.7,
+                y: y + 0.125,
+                x: 10 - 0.35 - 0.3 - (0.7 / 2)
+            })
         };
     }
 

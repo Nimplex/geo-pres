@@ -1,22 +1,26 @@
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dataDirPath } from "./parser";
 import { log } from "./logger";
 import { LogStyle } from "./logger";
-import type { Map, Voivodeship } from "./types";
+import type { City, Map, Voivodeship } from "./types";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
 
-async function downloadFile(URL: string, cityName: string) {
+export function formatFileName(city: City) {
+    return `${city.identifier}+${city.name}`.replaceAll(" ", "_");
+}
+
+async function downloadFile(URL: string, filename: string) {
     const res = await fetch(URL);
 
     if (res.status !== 200)
-        log([LogStyle.red, LogStyle.bold], `ERROR ${res.status}`, `Couldn't download COA for ${cityName}`);
+        log([LogStyle.red, LogStyle.bold], `ERROR ${res.status}`, `Couldn't download COA for ${filename}.png`);
 
     const buffer = await res.arrayBuffer();
 
-    return await writeFile(join(downloadsPath, cityName.replaceAll(" ", "_") + ".png"), Buffer.from(buffer));
+    return await writeFile(join(downloadsPath, `${filename}.png`), Buffer.from(buffer));
 }
 
 async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
@@ -47,9 +51,19 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
         return process.exit(1);
     }
- 
+
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
     const totalEntries = cities.length;
+
+    try {
+        const files = readdirSync(downloadsPath);
+        cities = cities.filter(city => !files.includes(`${city.identifier}+${city.name}.png`.replaceAll(" ", "_")));
+    } catch (err) {
+        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't read downloads directory for existing files");
+    }
+
+    if (totalEntries != cities.length)
+        log([LogStyle.blue], "EXISTING", `Found existing files, left to scrape ${cities.length} out of ${totalEntries}`);
 
     let downloads = [];
     let errors = 0;
@@ -70,12 +84,12 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         if (city.repeating)
             log([LogStyle.yellow, LogStyle.bold], "REPEATING", `Downloading city '${city.name}' in reverse suffix order, because it repeats in the data set`);
 
-	for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
+        for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
             for (const suffix of city.repeating
                 ? [`_(powiat ${city.powiat})`, `_(województwo_${city.voivodeship})`, "_(miasto)", ""]
                 : ["", "_(miasto)", `_(województwo_${city.voivodeship})`, `_(powiat_${city.powiat})`]
             ) {
-                const result = await tryPage(city.name, suffix, regex, index + 1, totalEntries).catch(err => {
+                const result = await tryPage(city.name, suffix, regex, index + 1, cities.length).catch(err => {
                     log([LogStyle.yellow], `NO HIT (#${hitnum++})`, err.message);
                 });
 
@@ -84,7 +98,9 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
                 found = true;
                 hitnum = 1;
-                downloads.push(downloadFile(result, `${city.identifier}+${city.name}`));
+
+                downloads.push(downloadFile(result, formatFileName(city)));
+
                 break;
             }
 
@@ -97,9 +113,9 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
         log([LogStyle.bold, LogStyle.red], "ERROR", `No result found for ${city.name}`);
 
-	errors++;
+        errors++;
     }
 
     await Promise.all(downloads); // just in case
-    log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${totalEntries - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`)
+    log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${cities.length - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`)
 }
