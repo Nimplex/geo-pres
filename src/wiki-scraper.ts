@@ -26,7 +26,7 @@ async function downloadFile(URL: string, filename: string) {
 async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
     const cityLink = cityName.replaceAll(" ", "_") + suffix;
     let response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
-    
+
     if (response.status === 404) {
         throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
     }

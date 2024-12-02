@@ -29,6 +29,11 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
         bold: true,
     });
 
+    const leftMargin = 0.3;
+    const blockHeight = 1.125;
+    const imageHeight = 0.875;
+    const imageWidth = 0.7;
+
     for (const voivodeshipName of Object.keys(voivodeships)) {
         let i = 0;
         let currentSlide: pptxgen.Slide;
@@ -55,32 +60,28 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             currentSlide!.background = { color: "#000000" };
 
-            const y = 1.125 * (i++ % 5);
+            const y = blockHeight * (i++ % 5);
 
             currentSlide!.addShape(presentation.ShapeType.rect, {
                 x: 0,
                 y,
-                h: 1.125,
+                h: blockHeight,
                 w: "100%",
                 fill: { color: "#0f0f0f" }
             });
 
             currentSlide!.addText(city.name, {
                 valign: "middle",
-                x: 0.3,
-                y,
-                h: 1.125,
-                w: "40%",
+                x: leftMargin, y,
+                h: blockHeight,
                 fontSize: 14,
                 color: "#ffffff",
             });
 
             currentSlide!.addText(city.totalPopulation.toString(), {
                 valign: "middle",
-                x: 1.5,
-                y,
-                h: 1.125,
-                w: "40%",
+                x: leftMargin + 1.5, y,
+                h: blockHeight,
                 fontSize: 14,
                 color: "#ffffff",
             });
@@ -89,10 +90,10 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
-                h: 0.875,
-                w: 0.7,
-                y: y + 0.125,
-                x: 10 - 0.35 - 0.3 - (0.7 / 2)
+                x: 10 - leftMargin - imageWidth,
+                y: y + (blockHeight - imageHeight) / 2,
+                h: imageHeight,
+                w: imageWidth,
             })
         };
     }
