@@ -2,14 +2,13 @@ import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { dataDirPath } from "./parser";
-import { log } from "./logger";
-import { LogStyle } from "./logger";
+import { LogStyle, log } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
 
 export const downloadsPath = join(dataDirPath, "coats-of-arms");
 
-export function formatFileName(city: City) {
-    return `${city.identifier}+${city.name}`.replaceAll(" ", "_");
+export function formatFileName(city: City, sufix = "") {
+    return `${city.identifier}+${city.name}${sufix}`.replaceAll(" ", "_");
 }
 
 async function downloadFile(URL: string, filename: string) {
