@@ -31,8 +31,8 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
     const leftMargin = 0.3;
     const blockHeight = 1.125;
-    const imageHeight = 0.875;
-    const imageWidth = 0.7;
+    const herbHeight = 0.875;
+    const herbWidth = 0.7;
 
     for (const voivodeshipName of Object.keys(voivodeships)) {
         let i = 0;
@@ -90,10 +90,10 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
-                x: 10 - leftMargin - imageWidth,
-                y: y + (blockHeight - imageHeight) / 2,
-                h: imageHeight,
-                w: imageWidth,
+                x: 10 - leftMargin - herbWidth,
+                y: y + (blockHeight - herbHeight) / 2,
+                h: herbHeight,
+                w: herbWidth,
             })
         };
     }
