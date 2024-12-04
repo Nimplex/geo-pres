@@ -5,46 +5,72 @@ import { dataDirPath } from "./parser";
 import { LogStyle, log } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
 
-export const downloadsPath = join(dataDirPath, "coats-of-arms");
+export const downloadsPathCOA = join(dataDirPath, "coats-of-arms");
+export const downloadsPathBackgrounds = join(dataDirPath, "backgrounds");
 
-export function formatFileName(city: City, sufix = "") {
-    return `${city.identifier}+${city.name}${sufix}`.replaceAll(" ", "_");
+const downloadAmount = 2;
+
+export function formatFileName(city: City, suffix = "") {
+    return `${city.identifier}+${city.name}${suffix}`.replaceAll(" ", "_");
 }
 
-async function downloadFile(URL: string, filename: string) {
+async function downloadFile(URL: string, filename: string, location: string) {
     const res = await fetch(URL);
 
     if (res.status !== 200)
-        log([LogStyle.red, LogStyle.bold], `ERROR ${res.status}`, `Couldn't download COA for ${filename}.png`);
+        throw new Error(`${res.status}: Couldn't download file \x1b[1m${URL.replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}\x1b[m`);
 
     const buffer = await res.arrayBuffer();
 
-    return await writeFile(join(downloadsPath, `${filename}.png`), Buffer.from(buffer));
+    return await writeFile(join(location, `${filename}.png`), Buffer.from(buffer));
 }
 
 async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
+    // console.log(`Processing ${cityName}`);
     const cityLink = cityName.replaceAll(" ", "_") + suffix;
-    let response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
+    const response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
 
     if (response.status === 404) {
         throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
     }
 
-    let result = regex.exec(await response.text());
+    const text = (await response.text()).replaceAll("\n", "");
+
+    // FIXME: this doesn't work
+    const timeout = () => { 
+        return new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Regex match timed out")), 1000);
+        })
+    }
+
+    let result = undefined
+    
+    try {
+        result = await Promise.race([timeout, regex.exec(text)]);
+    } catch (err: any) {
+        throw new Error(err.message);
+    }
+
+    // console.log("exec");
     if (!result) {
         throw new Error(`No COA: \x1b[1m${cityLink.padStart(45, " ")}\x1b[m, trying next...`);
     }
 
-    log([LogStyle.bold, LogStyle.green], `HIT ${`${index}/${total}`.padStart(11, " ")}`, `${cityLink}`.padStart(53, " "), `, ${result[1].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`)
+    log([LogStyle.bold, LogStyle.green], `HIT ${`${index}/${total}`.padStart(11, " ")}`, `${cityLink}`.padStart(53, " "), `, ${result[1].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`);
+    log([LogStyle.bold, LogStyle.green], "+", `${cityLink}`.padStart(53, " "), `, ${result[2].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`);
 
-    return `https:${result[1]}`;
+    return [`https:${result[1]}`, `https:${result[2]}`];
 }
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     try {
-        if (!existsSync(downloadsPath)) {
-            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPath}" doesn't exist, creating one for you`);
-            await mkdir(downloadsPath);
+        if (!existsSync(downloadsPathCOA)) {
+            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPathCOA}" doesn't exist, creating one for you`);
+            await mkdir(downloadsPathCOA);
+        }
+        if (!existsSync(downloadsPathBackgrounds)) {
+            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPathBackgrounds}" doesn't exist, creating one for you`);
+            await mkdir(downloadsPathBackgrounds);
         }
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
@@ -55,7 +81,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     const totalEntries = cities.length;
 
     try {
-        const files = readdirSync(downloadsPath);
+        const files = readdirSync(downloadsPathCOA);
         cities = cities.filter(city => !files.includes(`${city.identifier}+${city.name}.png`.replaceAll(" ", "_")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't read downloads directory for existing files");
@@ -83,7 +109,11 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         if (city.repeating)
             log([LogStyle.yellow, LogStyle.bold], "REPEATING", `Downloading city '${city.name}' in reverse suffix order, because it repeats in the data set`);
 
-        for (const regex of [new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>/g), new RegExp(/<img.*?src="(.+?COA.+?)".*?>/g)]) {
+        for (const regex of [
+            new RegExp(/<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>.*?<img .*?alt="Herb" .*?src="(.+?)"/gi), // main match
+            new RegExp(/<img .*?alt="Ilustracja" .*?src="(.+?)".*?>.*?<img.*?src="(.+?COA.+?)".*?>/gi),             // workaround for Solec nad Wisłą
+            new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>.*?<img .*?src="(.+?Dworzec.+?)".*?>.*?/gi),           // workaround for Koluszki
+        ]) {
             for (const suffix of city.repeating
                 ? [`_(powiat ${city.powiat})`, `_(województwo_${city.voivodeship})`, "_(miasto)", ""]
                 : ["", "_(miasto)", `_(województwo_${city.voivodeship})`, `_(powiat_${city.powiat})`]
@@ -98,7 +128,15 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
                 found = true;
                 hitnum = 1;
 
-                downloads.push(downloadFile(result, formatFileName(city)));
+                const [coa, background] = result
+
+                const errorHandle = (err: Error) => {
+                    const errnum = err.message.substring(0, 2)
+                    log([LogStyle.red, LogStyle.bold], `ERROR ${errnum}`, err.message.substring(5));
+                }
+                
+                downloads.push(downloadFile(coa, formatFileName(city), downloadsPathCOA).catch(errorHandle));
+                downloads.push(downloadFile(background, formatFileName(city), downloadsPathBackgrounds).catch(errorHandle));
 
                 break;
             }

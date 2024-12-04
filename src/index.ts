@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 import { parse, readData } from "./parser"; 
-import { downloadsPath, formatFileName, scrapeWiki } from "./wiki-scraper";
+import { downloadsPathCOA, formatFileName, scrapeWiki } from "./wiki-scraper";
 import type { City, Map, Voivodeship } from "./types";
 
 async function readHerb(city: City) {
-    const file = await readFile(join(downloadsPath, `${formatFileName(city)}.png`.replaceAll(" ", "_")));
+    const file = await readFile(join(downloadsPathCOA, `${formatFileName(city)}.png`.replaceAll(" ", "_")));
     const content = file.toString("base64");
 
     return content;
