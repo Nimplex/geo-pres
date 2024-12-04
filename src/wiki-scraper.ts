@@ -27,7 +27,9 @@ async function downloadFile(URL: string, filename: string, location: string) {
 
 async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
     // console.log(`Processing ${cityName}`);
-    const cityLink = cityName.replaceAll(" ", "_") + suffix;
+    log([LogStyle.blue], "Page", `Processing ${cityName}`);
+    
+    const cityLink = `${cityName}${suffix}`.replaceAll(" ", "_");
     const response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
 
     if (response.status === 404) {
@@ -37,21 +39,22 @@ async function tryPage(cityName: string, suffix: string, regex: RegExp, index: n
     const text = (await response.text()).replaceAll("\n", "");
 
     // FIXME: this doesn't work
-    const timeout = () => { 
-        return new Promise((_, reject) => {
-            setTimeout(() => reject(new Error("Regex match timed out")), 1000);
-        })
-    }
+    // const timeout = () => { 
+    //     return new Promise((_, reject) => {
+    //         setTimeout(reject, 4000, new Error("Regex match timed out"));
+    //     })
+    // }
 
-    let result = undefined
+    log([LogStyle.blue], "REGEX", "Running regex expression, wait...");
+    let result = regex.exec(text);
+    // let result = undefined
     
-    try {
-        result = await Promise.race([timeout, regex.exec(text)]);
-    } catch (err: any) {
-        throw new Error(err.message);
-    }
+    // try {
+    //     result = await Promise.race([timeout, regex.exec(text)]);
+    // } catch (err: any) {
+    //     throw new Error(err.message);
+    // }
 
-    // console.log("exec");
     if (!result) {
         throw new Error(`No COA: \x1b[1m${cityLink.padStart(45, " ")}\x1b[m, trying next...`);
     }
@@ -81,10 +84,14 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     const totalEntries = cities.length;
 
     try {
-        const files = readdirSync(downloadsPathCOA);
-        cities = cities.filter(city => !files.includes(`${city.identifier}+${city.name}.png`.replaceAll(" ", "_")));
+        const COAFiles = readdirSync(downloadsPathCOA);
+	let backgroundFiles = readdirSync(downloadsPathBackgrounds);
+
+	backgroundFiles = backgroundFiles.filter(fileName => COAFiles.includes(fileName));
+
+        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city) + ".png"));
     } catch (err) {
-        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't read downloads directory for existing files");
+        log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
     }
 
     if (totalEntries != cities.length)
@@ -128,10 +135,10 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
                 found = true;
                 hitnum = 1;
 
-                const [coa, background] = result
+                const [coa, background] = result;
 
                 const errorHandle = (err: Error) => {
-                    const errnum = err.message.substring(0, 2)
+                    const errnum = err.message.substring(0, 2);
                     log([LogStyle.red, LogStyle.bold], `ERROR ${errnum}`, err.message.substring(5));
                 }
                 
