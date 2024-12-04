@@ -2,13 +2,11 @@ import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { dataDirPath } from "./parser";
-import { LogStyle, log } from "./logger";
+import { log, LogStyle } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
 
 export const downloadsPathCOA = join(dataDirPath, "coats-of-arms");
 export const downloadsPathBackgrounds = join(dataDirPath, "backgrounds");
-
-const downloadAmount = 2;
 
 export function formatFileName(city: City, suffix = "") {
     return `${city.identifier}+${city.name}${suffix}`.replaceAll(" ", "_");
@@ -22,47 +20,39 @@ async function downloadFile(URL: string, filename: string, location: string) {
 
     const buffer = await res.arrayBuffer();
 
+    // console.log("kaka")
     return await writeFile(join(location, `${filename}.png`), Buffer.from(buffer));
 }
 
-async function tryPage(cityName: string, suffix: string, regex: RegExp, index: number, total: number) {
-    // console.log(`Processing ${cityName}`);
-    log([LogStyle.blue], "Page", `Processing ${cityName}`);
-    
+async function tryPage(cityName: string, suffix: string, regexes: RegExp[], names: string[], index: number, total: number) {
     const cityLink = `${cityName}${suffix}`.replaceAll(" ", "_");
     const response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
 
-    if (response.status === 404) {
+    if (response.status === 404)
         throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
-    }
 
-    const text = (await response.text()).replaceAll("\n", "");
+    const text = (await response.text());
 
-    // FIXME: this doesn't work
-    // const timeout = () => { 
-    //     return new Promise((_, reject) => {
-    //         setTimeout(reject, 4000, new Error("Regex match timed out"));
-    //     })
-    // }
+    const links = regexes.map(regex => {
+        let result = regex.exec(text);
 
-    log([LogStyle.blue], "REGEX", "Running regex expression, wait...");
-    let result = regex.exec(text);
-    // let result = undefined
+        if (!result)
+            throw new Error(`No match: \x1b[1m${cityLink.padStart(43, " ")}\x1b[m, trying next...`);
+
+        return `https:${result[1]}`;
+    })
+
+    links.forEach((link, i) => {
+        const newLink = link.replaceAll(/^.*\//g, " ");
+
+        log(
+            [LogStyle.bold, LogStyle.green],
+            i ? `+ ${`${index}/${total}`.padStart(13, " ")}` : `HIT`,
+            `${i ? " ".repeat(54) : cityLink.padStart(53, " ") + ":"} ${names[i].padEnd(6, " ")} --> ${newLink}`
+        );
+    })
     
-    // try {
-    //     result = await Promise.race([timeout, regex.exec(text)]);
-    // } catch (err: any) {
-    //     throw new Error(err.message);
-    // }
-
-    if (!result) {
-        throw new Error(`No COA: \x1b[1m${cityLink.padStart(45, " ")}\x1b[m, trying next...`);
-    }
-
-    log([LogStyle.bold, LogStyle.green], `HIT ${`${index}/${total}`.padStart(11, " ")}`, `${cityLink}`.padStart(53, " "), `, ${result[1].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`);
-    log([LogStyle.bold, LogStyle.green], "+", `${cityLink}`.padStart(53, " "), `, ${result[2].replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}`);
-
-    return [`https:${result[1]}`, `https:${result[2]}`];
+    return links
 }
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
@@ -84,11 +74,9 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     const totalEntries = cities.length;
 
     try {
-        const COAFiles = readdirSync(downloadsPathCOA);
-	let backgroundFiles = readdirSync(downloadsPathBackgrounds);
-
-	backgroundFiles = backgroundFiles.filter(fileName => COAFiles.includes(fileName));
-
+        const coaFiles = readdirSync(downloadsPathCOA);
+        let backgroundFiles = readdirSync(downloadsPathBackgrounds);
+        backgroundFiles = backgroundFiles.filter(fileName => coaFiles.includes(fileName));
         cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city) + ".png"));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
@@ -109,6 +97,12 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         city.repeating = true;
     });
 
+    const regexesNames = ["COA", "Image"];
+    const regexesList = [
+        [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>/s], // main match
+        [/<img .*?src="(.+?COA.+?)".*?>/, /<img .*?alt="Ilustracja" .*?src="(.+?)".*?>/i],                // workaround for 'Solec nad Wisłą' and 'Baranów Sandomierski'
+    ];
+    
     for (const [index, city] of cities.entries()) {
         let found = false;
         let hitnum = 1;
@@ -116,16 +110,19 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         if (city.repeating)
             log([LogStyle.yellow, LogStyle.bold], "REPEATING", `Downloading city '${city.name}' in reverse suffix order, because it repeats in the data set`);
 
-        for (const regex of [
-            new RegExp(/<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>.*?<img .*?alt="Herb" .*?src="(.+?)"/gi), // main match
-            new RegExp(/<img .*?alt="Ilustracja" .*?src="(.+?)".*?>.*?<img.*?src="(.+?COA.+?)".*?>/gi),             // workaround for Solec nad Wisłą
-            new RegExp(/<img .*?alt="Herb" .*?src="(.+?)".*?>.*?<img .*?src="(.+?Dworzec.+?)".*?>.*?/gi),           // workaround for Koluszki
-        ]) {
+        for (const regs of regexesList) {
             for (const suffix of city.repeating
                 ? [`_(powiat ${city.powiat})`, `_(województwo_${city.voivodeship})`, "_(miasto)", ""]
                 : ["", "_(miasto)", `_(województwo_${city.voivodeship})`, `_(powiat_${city.powiat})`]
             ) {
-                const result = await tryPage(city.name, suffix, regex, index + 1, cities.length).catch(err => {
+                const result = await tryPage(
+                    city.name,
+                    suffix,
+                    regs,
+                    regexesNames,
+                    index + 1,
+                    cities.length
+                ).catch(err => {
                     log([LogStyle.yellow], `NO HIT (#${hitnum++})`, err.message);
                 });
 
@@ -161,5 +158,11 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     }
 
     await Promise.all(downloads); // just in case
-    log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${cities.length - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`)
+
+    log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${cities.length - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`);
+
+    if (errors) {
+        log([LogStyle.italic, LogStyle.red], "EXITING", "Exiting due to previous errors in scraping...");
+        process.exit(1);
+    }
 }
