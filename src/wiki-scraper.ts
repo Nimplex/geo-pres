@@ -20,7 +20,6 @@ async function downloadFile(URL: string, filename: string, location: string) {
 
     const buffer = await res.arrayBuffer();
 
-    // console.log("kaka")
     return await writeFile(join(location, `${filename}.png`), Buffer.from(buffer));
 }
 
