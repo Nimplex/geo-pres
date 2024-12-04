@@ -3,6 +3,7 @@ import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 import { parse, readData } from "./parser"; 
 import { downloadsPathCOA, formatFileName, scrapeWiki } from "./wiki-scraper";
+import { log, LogStyle } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
 
 async function readHerb(city: City) {
@@ -86,7 +87,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-            const herbData = await readHerb(city);
+            const herbData = await readHerb(city).catch(err => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
