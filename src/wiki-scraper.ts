@@ -56,19 +56,22 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     try {
-        if (!existsSync(downloadsPathCOA)) {
-            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPathCOA}" doesn't exist, creating one for you`);
-            await mkdir(downloadsPathCOA);
+        const makeDownloadDir = async (path: string) => {
+            if (!existsSync(path)) {
+                log([LogStyle.yellow], "WARN", `Downloads directory "${path}" doesn't exist, creating one for you`);
+                await mkdir(path).catch(_ => {
+                    throw new Error(`Error creating directory ${path}`);
+                });
+            }
         }
-        if (!existsSync(downloadsPathBackgrounds)) {
-            log([LogStyle.yellow], "WARN", `Downloads directory "${downloadsPathBackgrounds}" doesn't exist, creating one for you`);
-            await mkdir(downloadsPathBackgrounds);
-        }
-    } catch (err) {
+
+        await makeDownloadDir(downloadsPathCOA);
+        await makeDownloadDir(downloadsPathBackgrounds);
+    } catch (_) {
         log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
         return process.exit(1);
     }
-
+    
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
     const totalEntries = cities.length;
 
