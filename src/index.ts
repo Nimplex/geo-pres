@@ -2,12 +2,13 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 import { parse, readData } from "./parser"; 
-import { downloadsPathCOA, formatFileName, scrapeWiki } from "./wiki-scraper";
+import { downloadsPathCOA, downloadsPathBackgrounds, formatFileName, scrapeWiki } from "./wiki-scraper";
+import { editBackgrounds } from "./image-editor";
 import { log, LogStyle } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
 
-async function readHerb(city: City) {
-    const file = await readFile(join(downloadsPathCOA, `${formatFileName(city)}.png`.replaceAll(" ", "_")));
+async function readFileAsB64(path: string) {
+    const file = await readFile(path);
     const content = file.toString("base64");
 
     return content;
@@ -63,13 +64,18 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             const y = blockHeight * (i++ % 5);
 
-            currentSlide!.addShape(presentation.ShapeType.rect, {
-                x: 0,
-                y,
-                h: blockHeight,
-                w: "100%",
-                fill: { color: "#0f0f0f" }
+            const backgroundImage = await readFileAsB64(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png"))).catch((err)  => {
+                log([LogStyle.red, LogStyle.bold], "PRESGEN ERR", `Couldn't read background image for: ${city.name}, ${err}`)
             });
+
+            if (backgroundImage)
+                currentSlide!.addImage({
+                    data: `data:image/png;base64,${backgroundImage}`,
+                    x: 0,
+                    y,
+                    h: blockHeight,
+                    w: "100%",
+                });
 
             currentSlide!.addText(city.name, {
                 valign: "middle",
@@ -87,7 +93,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-            const herbData = await readHerb(city).catch(err => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
+	    const herbData = await readFileAsB64(join(downloadsPathCOA, formatFileName(city, ".png"))).catch(err => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
@@ -109,6 +115,7 @@ async function main() {
     const voivodeships = parse(data);
 
     await scrapeWiki(voivodeships);
+    await editBackgrounds(voivodeships);
     await generatePresentation(voivodeships);
 }
 

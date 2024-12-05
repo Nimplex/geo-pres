@@ -1,5 +1,10 @@
 import { Jimp } from "jimp";
 import { writeFile } from "node:fs/promises";
+import { readdirSync } from "node:fs"; 
+import { join } from "node:path";
+import { downloadsPathBackgrounds, formatFileName } from "./wiki-scraper";
+import { log, LogStyle } from "./logger";
+import type { Map, Voivodeship } from "./types";
 
 interface EditImageOptions {
     brightness: number;
@@ -29,3 +34,25 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
 
     return canvas.getBuffer("image/png");
 }
+
+export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
+    let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
+ 
+    try {
+        const backgroundFiles = readdirSync(downloadsPathBackgrounds);
+        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".edited.png")));
+    } catch (err) {
+        log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
+    }
+
+    cities.forEach(async city => {
+        const fileName = join(downloadsPathBackgrounds, formatFileName(city, ".png"));
+        const editedImage = await prepareBackground(fileName);
+
+	log([LogStyle.purple], "EDIT", `Processed image "${fileName}"`);
+
+	return await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png")), Buffer.from(editedImage));
+    });
+
+    log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);
+};

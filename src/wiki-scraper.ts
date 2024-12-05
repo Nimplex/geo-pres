@@ -39,7 +39,7 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
             throw new Error(`No match: \x1b[1m${cityLink.padStart(43, " ")}\x1b[m, trying next...`);
 
         return `https:${result[1]}`;
-    })
+    });
 
     links.forEach((link, i) => {
         const newLink = link.replaceAll(/^.*\//g, " ");
@@ -49,9 +49,9 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
             i ? `+ ${`${index}/${total}`.padStart(13, " ")}` : `HIT`,
             `${i ? " ".repeat(54) : cityLink.padStart(53, " ") + ":"} ${names[i].padEnd(6, " ")} --> ${newLink}`
         );
-    })
+    });
     
-    return links
+    return links;
 }
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
@@ -79,7 +79,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         const coaFiles = readdirSync(downloadsPathCOA);
         let backgroundFiles = readdirSync(downloadsPathBackgrounds);
         backgroundFiles = backgroundFiles.filter(fileName => coaFiles.includes(fileName));
-        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city) + ".png"));
+        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".png")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
     }
