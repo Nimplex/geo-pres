@@ -12,7 +12,7 @@ interface EditImageOptions {
 }
 
 const brightness = 0.5;
-const blurness = 1;
+const blurness = 0;
 
 async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
     // 10 inches at 192 dpi is 1920px, 1.125 inches at 192 dpi is 216px;
@@ -20,7 +20,8 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
     const image = await Jimp.read(URL);
 
     image.brightness(options.brightness);
-    image.blur(options.blurness);
+    if (options.blurness > 0)
+        image.blur(options.blurness);
 
     const aspectRatio = image.height / image.width;
 
