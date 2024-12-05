@@ -50,9 +50,9 @@ export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
         const fileName = join(downloadsPathBackgrounds, formatFileName(city, ".png"));
         const editedImage = await prepareBackground(fileName);
 
-	log([LogStyle.purple], "EDIT", `Processed image "${fileName}"`);
+        log([LogStyle.purple], "EDIT", `Processed image "${fileName}"`);
 
-	return await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png")), Buffer.from(editedImage));
+        return await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png")), Buffer.from(editedImage));
     });
 
     log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);
