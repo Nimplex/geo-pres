@@ -30,7 +30,7 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
     if (response.status === 404)
         throw new Error(`404: \x1b[1m${cityLink.padStart(48, " ")}\x1b[m, trying next...`);
 
-    const text = (await response.text());
+    const text = await response.text();
 
     const links = regexes.map(regex => {
         let result = regex.exec(text);
@@ -68,7 +68,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         await makeDownloadDir(downloadsPathCOA);
         await makeDownloadDir(downloadsPathBackgrounds);
     } catch (_) {
-        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting");
+        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting...");
         return process.exit(1);
     }
     
@@ -77,8 +77,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
     try {
         const coaFiles = readdirSync(downloadsPathCOA);
-        let backgroundFiles = readdirSync(downloadsPathBackgrounds);
-        backgroundFiles = backgroundFiles.filter(fileName => coaFiles.includes(fileName));
+        const backgroundFiles = readdirSync(downloadsPathBackgrounds).filter(fileName => coaFiles.includes(fileName));
         cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".png")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
