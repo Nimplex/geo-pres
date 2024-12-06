@@ -41,6 +41,12 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
         return `https:${result[1]}`;
     });
 
+    // return an error if the anything repeats
+    if ((new Set(links)).size !== links.length) {
+        throw new Error(`Repeated img: \x1b[1m${cityLink.padStart(43, " ")}\x1b[m, trying next...`);
+    }
+
+    // logging
     links.forEach((link, i) => {
         const newLink = link.replaceAll(/^.*\//g, " ");
 
@@ -50,7 +56,7 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
             `${i ? " ".repeat(54) : cityLink.padStart(53, " ") + ":"} ${names[i].padEnd(6, " ")} --> ${newLink}`
         );
     });
-    
+
     return links;
 }
 
@@ -98,10 +104,12 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         city.repeating = true;
     });
 
+    log([LogStyle.cyan, LogStyle.italic], "STARTING", "Starting scraping...")
     const regexesNames = ["COA", "Image"];
     const regexesList = [
-        [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>/s], // main match
-        [/<img .*?src="(.+?COA.+?)".*?>/, /<img .*?alt="Ilustracja" .*?src="(.+?)".*?>/i],                // workaround for 'Solec nad Wisłą' and 'Baranów Sandomierski'
+        [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>/s],             // main match
+        [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /.*<figure .*?typeof="mw:File\/Thumb".*?<img .*?src="(.+?)".*?>/s], // workaround for the ones missing an image in the header
+        [/<img .*?src="(.+?COA.+?)".*?>/, /<img .*?alt="Ilustracja" .*?src="(.+?)".*?>/i],                            // workaround for 'Solec nad Wisłą' and 'Baranów Sandomierski'
     ];
     
     for (const [index, city] of cities.entries()) {
