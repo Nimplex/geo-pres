@@ -46,12 +46,12 @@ export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
     }
 
+    let processed = 0
     cities.forEach(async city => {
         const fileName = join(downloadsPathBackgrounds, formatFileName(city, ".png"));
         const editedImage = await prepareBackground(fileName);
 
-        log([LogStyle.purple], "EDIT", `Processed image "${fileName}"`);
-
+        log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${fileName}'`);
         return await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png")), Buffer.from(editedImage));
     });
 
