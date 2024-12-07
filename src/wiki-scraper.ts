@@ -92,9 +92,6 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     if (totalEntries != cities.length)
         log([LogStyle.blue], "EXISTING", `Found existing files, left to scrape ${cities.length} out of ${totalEntries}`);
 
-    let downloads = [];
-    let errors = 0;
-
     let foundCities: Map<number> = {};
     cities.forEach(city => {
         foundCities[city.name] ? foundCities[city.name]++ : foundCities[city.name] = 1;
@@ -111,6 +108,14 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /.*<figure .*?typeof="mw:File\/Thumb".*?<img .*?src="(.+?)".*?>/s], // workaround for the ones missing an image in the header
         [/<img .*?src="(.+?COA.+?)".*?>/, /<img .*?alt="Ilustracja" .*?src="(.+?)".*?>/i],                            // workaround for 'Solec nad Wisłą' and 'Baranów Sandomierski'
     ];
+
+    let downloads = [];
+    let errors = 0;
+    let pendingDownloads = 0;
+
+    let checkDownloads = () => {
+        pendingDownloads--;
+    };
     
     for (const [index, city] of cities.entries()) {
         let found = false;
@@ -148,8 +153,9 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
                     log([LogStyle.red, LogStyle.bold], `ERROR ${errnum}`, err.message.substring(5));
                 }
                 
-                downloads.push(downloadFile(coa, formatFileName(city), downloadsPathCOA).catch(errorHandle));
-                downloads.push(downloadFile(background, formatFileName(city), downloadsPathBackgrounds).catch(errorHandle));
+                downloads.push(downloadFile(coa, formatFileName(city), downloadsPathCOA).then(checkDownloads).catch(errorHandle));
+                downloads.push(downloadFile(background, formatFileName(city), downloadsPathBackgrounds).then(checkDownloads).catch(errorHandle));
+                pendingDownloads += 2;
 
                 break;
             }
@@ -166,7 +172,12 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         errors++;
     }
 
-    await Promise.all(downloads); // just in case
+    checkDownloads = () => {
+        log([LogStyle.blue], "INFO", `Waiting for downloads: ${pendingDownloads--} remaining...`);
+    }
+    log([LogStyle.blue], "INFO", `Waiting for downloads: ${pendingDownloads} remaining...`);
+
+    await Promise.all(downloads);
 
     log([LogStyle.cyan, LogStyle.italic], "FINISHED", `Finished scraping; \x1b[1;32m${cities.length - errors} found\x1b[m, \x1b[1;31m${errors} errors\x1b[m`);
 
