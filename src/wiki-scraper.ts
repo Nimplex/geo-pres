@@ -112,9 +112,12 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     let downloads = [];
     let errors = 0;
     let pendingDownloads = 0;
-
-    let checkDownloads = () => {
+    let awaitingDownloads = false;
+    function checkDownloads() {
         pendingDownloads--;
+        if (!awaitingDownloads)
+            return;
+        log([LogStyle.blue], "INFO", `Waiting for downloads: ${pendingDownloads} remaining...`);
     };
     
     for (const [index, city] of cities.entries()) {
@@ -172,9 +175,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
         errors++;
     }
 
-    checkDownloads = () => {
-        log([LogStyle.blue], "INFO", `Waiting for downloads: ${pendingDownloads--} remaining...`);
-    }
+    awaitingDownloads = true;
     log([LogStyle.blue], "INFO", `Waiting for downloads: ${pendingDownloads} remaining...`);
 
     await Promise.all(downloads);
