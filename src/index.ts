@@ -5,7 +5,7 @@ import { parse, readData } from "./parser";
 import { downloadsPathCOA, downloadsPathBackgrounds, formatFileName, scrapeWiki } from "./wiki-scraper";
 import { editBackgrounds } from "./image-editor";
 import { log, LogStyle } from "./logger";
-import type { City, Map, Voivodeship } from "./types";
+import type { Map, Voivodeship } from "./types";
 
 async function readFileAsB64(path: string) {
     const file = await readFile(path);
@@ -93,7 +93,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-	    const herbData = await readFileAsB64(join(downloadsPathCOA, formatFileName(city, ".png"))).catch(err => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
+	    const herbData = await readFileAsB64(join(downloadsPathCOA, formatFileName(city, ".png"))).catch(_ => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
