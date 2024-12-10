@@ -43,7 +43,7 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
 
     // return an error if the anything repeats
     if ((new Set(links)).size !== links.length) {
-        throw new Error(`Repeated img: \x1b[1m${cityLink.padStart(43, " ")}\x1b[m, trying next...`);
+        throw new Error(`Repeated img: \x1b[1m${cityLink.padStart(39, " ")}\x1b[m, trying next...`);
     }
 
     // logging
