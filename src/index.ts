@@ -64,7 +64,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
             const y = blockHeight * (i++ % 5);
 
-            const backgroundImage = await readFileAsB64(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png"))).catch((err)  => {
+            const backgroundImage = await readFileAsB64(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp"))).catch((err)  => {
                 log([LogStyle.red, LogStyle.bold], "PRESGEN ERR", `Couldn't read background image for: ${city.name}, ${err}`)
             });
 

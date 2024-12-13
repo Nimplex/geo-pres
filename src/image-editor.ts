@@ -1,4 +1,4 @@
-import { Jimp } from "jimp";
+import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 import { readdirSync } from "node:fs"; 
 import { join } from "node:path";
@@ -15,47 +15,100 @@ const brightness = 0.5;
 const blurness = 0;
 
 async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
-    // 10 inches at 192 dpi is 1920px, 1.125 inches at 192 dpi is 216px;
-    const canvas = new Jimp({ width: 1920, height: 216 });
-    const image = await Jimp.read(URL);
+    const width = 1920;
+    const height = 216;
 
-    image.brightness(options.brightness);
-    if (options.blurness > 0)
-        image.blur(options.blurness);
+    // Create a blank canvas (transparent background)
+    const canvas = sharp({
+        create: {
+	    width, 
+	    height,
+	    channels: 4,  // RGBA
+	    background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
+	}
+    });
 
-    const aspectRatio = image.height / image.width;
+    // Load the image from the URL (or local file)
+    let image = sharp(URL);
 
-    // leave some space for coats of arms, (10 - leftMargin * 2 - imageWidth) * 192 dpi
+    // Apply brightness and blur if necessary
+    if (options.brightness !== 0) {
+	image = image.modulate({ brightness: options.brightness });
+    }
+
+    if (options.blurness > 0) {
+	image = image.blur(options.blurness);
+    }
+
+    // Get image metadata (for aspect ratio)
+    const metadata = await image.metadata();
+
+    if (!metadata)
+	throw new Error("Undefined image metadata");
+
+    if (!metadata.height)
+	throw new Error("Undefined image height");
+
+    if (!metadata.width)
+        throw new Error("Undefined image width");
+
+    const aspectRatio = metadata.height / metadata.width;
+
+    // Define offsetWidth and calculate the new height for the image
     const offsetWidth = 1670;
     const newHeight = aspectRatio * offsetWidth;
 
-    image.resize({ w: offsetWidth, h: newHeight });
+    // Resize the image to fit the desired width
+    image = image.resize(offsetWidth, Math.round(newHeight)).extract({ height, width: offsetWidth, top: Math.round(newHeight / 2), left: 0 });
 
-    canvas.composite(image, 0, (newHeight / 2) * -1);
+    // Prepare the image buffer after applying the transformations
+    const imageBuffer = await image.toBuffer();
 
-    return canvas.getBuffer("image/png");
+    // Composite the image onto the canvas (background)
+    const compositeImage = canvas.composite([{ input: imageBuffer, gravity: "west" }]).webp();
+
+    // Return the final image
+    return compositeImage.toBuffer()
 }
 
 export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
- 
+    let backgroundFiles: string[] = [];
+
     try {
-        const backgroundFiles = readdirSync(downloadsPathBackgrounds);
-        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".edited.png")));
+        backgroundFiles = readdirSync(downloadsPathBackgrounds);
+        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".edited.webp")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
     }
 
     let processed = 0;
-    let queue = cities.map(async city => {
-        const fileName = join(downloadsPathBackgrounds, formatFileName(city, ".png"));
-        const editedImage = await prepareBackground(fileName);
+    
+    for await (const city of cities) {
+	const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
 
-        log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${fileName}'`);
-        return writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.png")), Buffer.from(editedImage));
-    });
+	if (!fileName) {
+            log([LogStyle.red, LogStyle.bold], "ERROR", `Background file for ${city.name} not found`);
+	    
+            continue;
+        }
 
-    await Promise.all(queue);
+        const filePath = join(downloadsPathBackgrounds, fileName);
+
+	let editedImage;
+
+	try {
+	    editedImage = await prepareBackground(filePath);
+	} catch(err) {
+	    log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
+	}
+
+	if (!editedImage) continue;
+
+        log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${filePath}'`);
+        
+	await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
+    }
 
     log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);
 };

@@ -19,8 +19,11 @@ async function downloadFile(URL: string, filename: string, location: string) {
         throw new Error(`${res.status}: Couldn't download file \x1b[1m${URL.replaceAll("//upload.wikimedia.org/wikipedia/commons", "(...)")}\x1b[m`);
 
     const buffer = await res.arrayBuffer();
+    let fileFormat = (/[.]\w+?$/.exec(URL) || [])[0];
 
-    return await writeFile(join(location, `${filename}.png`), Buffer.from(buffer));
+    if (!fileFormat) fileFormat = ".png";
+
+    return await writeFile(join(location, `${filename}${fileFormat}`), Buffer.from(buffer));
 }
 
 async function tryPage(cityName: string, suffix: string, regexes: RegExp[], names: string[], stripThumb: boolean[], index: number, total: number) {
@@ -90,8 +93,10 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
     try {
         const coaFiles = readdirSync(downloadsPathCOA);
-        const backgroundFiles = readdirSync(downloadsPathBackgrounds).filter(fileName => coaFiles.includes(fileName));
-        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".png")));
+        const backgroundFiles = readdirSync(downloadsPathBackgrounds).map(fileName => fileName.replace(/[.]\w+?$/gm, "")).filter(fileName => {
+	    return coaFiles.find(coaFileName => coaFileName.startsWith(fileName));
+	});
+        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, "")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
     }

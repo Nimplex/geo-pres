@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@jimp/plugin-flip": "^1.6.0",
-    "jimp": "^1.6.0",
     "pptxgenjs": "^3.12.0",
+    "sharp": "^0.33.5",
     "wikipedia": "^2.1.2"
   }
 }
