@@ -16,14 +16,14 @@ async function downloadFile(URL: string, filename: string, location: string) {
     const res = await fetch(URL);
 
     if (res.status !== 200)
-        throw new Error(`${res.status}: Couldn't download file \x1b[1m${URL.replaceAll("//upload.wikimedia.org/wikipedia/commons/thumb", "(...)")}\x1b[m`);
+        throw new Error(`${res.status}: Couldn't download file \x1b[1m${URL.replaceAll("//upload.wikimedia.org/wikipedia/commons", "(...)")}\x1b[m`);
 
     const buffer = await res.arrayBuffer();
 
     return await writeFile(join(location, `${filename}.png`), Buffer.from(buffer));
 }
 
-async function tryPage(cityName: string, suffix: string, regexes: RegExp[], names: string[], index: number, total: number) {
+async function tryPage(cityName: string, suffix: string, regexes: RegExp[], names: string[], stripThumb: boolean[], index: number, total: number) {
     const cityLink = `${cityName}${suffix}`.replaceAll(" ", "_");
     const response = await fetch(`https://pl.wikipedia.org/wiki/${cityLink}`);
 
@@ -41,13 +41,20 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
         return `https:${result[1]}`;
     });
 
-    // return an error if the anything repeats
+    // return an error if anything repeats
     if ((new Set(links)).size !== links.length) {
         throw new Error(`Repeated img: \x1b[1m${cityLink.padStart(39, " ")}\x1b[m, trying next...`);
     }
 
+    const newLinks = links.map((link, i) => {
+        if (stripThumb[i] && /\/thumb/.test(link))
+            return link.replaceAll("/thumb", "").replace(/\/[^\/]*?$/, "");
+
+        return link
+    })
+
     // logging
-    links.forEach((link, i) => {
+    newLinks.forEach((link, i) => {
         const newLink = link.replaceAll(/^.*\//g, " ");
 
         log(
@@ -57,7 +64,7 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
         );
     });
 
-    return links;
+    return newLinks;
 }
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
@@ -103,6 +110,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
     log([LogStyle.cyan, LogStyle.italic], "STARTING", "Starting scraping...")
     const regexesNames = ["COA", "Image"];
+    const regexesStripThumb = [false, true];
     const regexesList = [
         [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>/s],             // main match
         [/<img .*?alt="Herb" .*?src="(.+?)".*?>/, /.*<figure .*?typeof="mw:File\/Thumb".*?<img .*?src="(.+?)".*?>/s], // workaround for the ones missing an image in the header
@@ -137,6 +145,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
                     suffix,
                     regs,
                     regexesNames,
+                    regexesStripThumb,
                     index + 1,
                     cities.length
                 ).catch(err => {
