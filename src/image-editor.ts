@@ -12,7 +12,7 @@ interface EditImageOptions {
 }
 
 const brightness = 0.5;
-const blurness = 0;
+const blurness = 3;
 
 async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
     const width = 1920;
