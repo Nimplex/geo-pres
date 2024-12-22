@@ -21,11 +21,11 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
     // Create a blank canvas (transparent background)
     const canvas = sharp({
         create: {
-	    width, 
-	    height,
-	    channels: 4,  // RGBA
-	    background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
-	}
+            width, 
+            height,
+            channels: 4,  // RGBA
+            background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
+        }
     });
 
     // Load the image from the URL (or local file)
@@ -33,21 +33,21 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
 
     // Apply brightness and blur if necessary
     if (options.brightness !== 0) {
-	image = image.modulate({ brightness: options.brightness });
+        image = image.modulate({ brightness: options.brightness });
     }
 
     if (options.blurness > 0) {
-	image = image.blur(options.blurness);
+        image = image.blur(options.blurness);
     }
 
     // Get image metadata (for aspect ratio)
     const metadata = await image.metadata();
 
     if (!metadata)
-	throw new Error("Undefined image metadata");
+        throw new Error("Undefined image metadata");
 
     if (!metadata.height)
-	throw new Error("Undefined image height");
+        throw new Error("Undefined image height");
 
     if (!metadata.width)
         throw new Error("Undefined image width");
@@ -89,31 +89,29 @@ export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
     }
 
     let processed = 0;
-    
     for await (const city of cities) {
-	const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
+        const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
 
-	if (!fileName) {
+        if (!fileName) {
             log([LogStyle.red, LogStyle.bold], "ERROR", `Background file for ${city.name} not found`);
-	    
             continue;
         }
 
         const filePath = join(downloadsPathBackgrounds, fileName);
 
-	let editedImage;
+        let editedImage = undefined;
 
-	try {
-	    editedImage = await prepareBackground(filePath);
-	} catch(err) {
-	    log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
-	}
+        try {
+            editedImage = await prepareBackground(filePath);
+        } catch(err) {
+            log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
+        }
 
-	if (!editedImage) continue;
+        if (!editedImage) continue;
 
         log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${filePath}'`);
-        
-	await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
+
+        await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
     }
 
     log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);

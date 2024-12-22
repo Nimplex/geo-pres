@@ -94,8 +94,8 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
     try {
         const coaFiles = readdirSync(downloadsPathCOA);
         const backgroundFiles = readdirSync(downloadsPathBackgrounds).map(fileName => fileName.replace(/[.]\w+?$/gm, "")).filter(fileName => {
-	    return coaFiles.find(coaFileName => coaFileName.startsWith(fileName));
-	});
+            return coaFiles.find(coaFileName => coaFileName.startsWith(fileName));
+        });
         cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, "")));
     } catch (err) {
         log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);

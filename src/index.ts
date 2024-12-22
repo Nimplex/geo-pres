@@ -96,7 +96,7 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-	    const herbData = await readFileAsB64(join(downloadsPathCOA, formatFileName(city, ".png"))).catch(_ => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
+            const herbData = await readFileAsB64(join(downloadsPathCOA, formatFileName(city, ".png"))).catch(_ => { log([LogStyle.bold, LogStyle.red], "FILE NOT FOUND", `No file found for '${city.name}'. This may happen due to errors in scraping. Exiting...`); process.exit(1) });
 
             currentSlide!.addImage({
                 data: `data:image/png;base64,${herbData}`,
