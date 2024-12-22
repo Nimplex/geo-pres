@@ -15,6 +15,9 @@ async function readFileAsB64(path: string) {
 }
 
 async function generatePresentation(voivodeships: Map<Voivodeship>) {
+    log([LogStyle.blue], "PRESGEN", "Generating pptx");
+    const timerStart = new Date();
+
     const presentation = new pptxgen();
     presentation.layout = "LAYOUT_16x9";
 
@@ -108,6 +111,8 @@ async function generatePresentation(voivodeships: Map<Voivodeship>) {
     await presentation.writeFile({
         fileName: join(import.meta.dir, "..", "data", "presentation.pptx"),
     });
+
+    log([LogStyle.blue], "PRESGEN", `Generated pptx in ${(new Date() - timerStart) / 1000} seconds`)
 }
 
 async function main() {

@@ -58,8 +58,14 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
     const offsetWidth = 1670;
     const newHeight = aspectRatio * offsetWidth;
 
+    const top = newHeight / 2 < height ? 0 : Math.round(newHeight / 2);
+
     // Resize the image to fit the desired width
-    image = image.resize(offsetWidth, Math.round(newHeight)).extract({ height, width: offsetWidth, top: Math.round(newHeight / 2), left: 0 });
+    image = image.resize(offsetWidth, Math.round(Math.max(newHeight, height)));
+
+    log([LogStyle.purple], "VERBOSE", `canvas height: ${height}, canvas width: ${width}, offset width: ${offsetWidth}, offsetted height: ${newHeight}, aspect ratio: ${aspectRatio.toFixed(2)}, top padding: ${Math.round(newHeight / 2)}`);
+
+    image = image.extract({ height, width: offsetWidth, top, left: 0 });
 
     // Prepare the image buffer after applying the transformations
     const imageBuffer = await image.toBuffer();
