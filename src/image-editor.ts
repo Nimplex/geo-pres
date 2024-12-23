@@ -24,7 +24,7 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
             width, 
             height,
             channels: 4,  // RGBA
-            background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
+            background: { r: 0, g: 0, b: 0, alpha: 1 } // Transparent background
         }
     });
 
