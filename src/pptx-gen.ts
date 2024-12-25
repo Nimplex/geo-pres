@@ -23,7 +23,7 @@ function findCoatOfArms(files: string[], city: City) {
 
 export async function generatePresentation(voivodeships: Map<Voivodeship>) {
     log([LogStyle.blue], "PRESGEN", "Generating pptx");
-    log([LogStyle.purple], "Verbose", `Reading "${downloadsPathCOA}" for coats of arms`);
+    log([LogStyle.purple], "VERBOSE", `Reading "${downloadsPathCOA}" for coats of arms`);
 
     let coaFiles: string[] = [];
 
@@ -59,7 +59,6 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
     const herbWidth = herbHeight / 1.6;
 
     for (const voivodeshipName of Object.keys(voivodeships)) {
-        let i = 0;
         let currentSlide: pptxgen.Slide;
 
         const voivodeshipTitleSlide = presentation.addSlide();
@@ -77,13 +76,12 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
             bold: true,
         });
 
-        for (const city of voivodeships[voivodeshipName]) {
+        for (const [i, city] of voivodeships[voivodeshipName].entries()) {
             if (i % 5 == 0) currentSlide = presentation.addSlide();
 
             currentSlide!.background = { color: "#2e2e2e" };
 
-            const yPos = (blockHeight + bottomMargin) * (i++ % citiesPerPage);
-
+            const yPos = (blockHeight + bottomMargin) * (i % citiesPerPage);
             const backgroundImage = await readFileAsB64(
                 join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp"))
             ).catch((err) => {
@@ -121,33 +119,34 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
                 color: "#ffffff",
             });
 
-            const COAFileName = findCoatOfArms(coaFiles, city);
+            const coaFileName = findCoatOfArms(coaFiles, city);
+            if (!coaFileName) continue;
 
-            if (COAFileName) {
-                const herbData = await readFileAsB64(COAFileName).catch((_) => {
-                    log(
-                        [LogStyle.bold, LogStyle.red],
-                        "FILE NOT FOUND",
-                        `No COA found for '${city.name}'. This may happen due to errors in scraping. Exiting...`
-                    );
-                    log([LogStyle.bold, LogStyle.purple], "VERBOSE", `${join(downloadsPathCOA, formatFileName(city, ".png"))}`)
-                    process.exit(1);
-                });
+            const herbData = await readFileAsB64(coaFileName).catch(() => {
+                log(
+                    [LogStyle.bold, LogStyle.red],
+                    "FILE NOT FOUND",
+                    `No COA found for '${city.name}'. This may happen due to errors in scraping. Exiting...`
+                );
+                log([LogStyle.bold, LogStyle.purple], "VERBOSE", `${join(downloadsPathCOA, formatFileName(city, ".png"))}`)
+                process.exit(1);
+            });
 
-                currentSlide!.addImage({
-                    data: `data:image/png;base64,${herbData}`,
-                    x: 10 - leftPadding - herbWidth,
-                    y: yPos + (blockHeight - herbHeight) / 2,
-                    h: herbHeight,
-                    w: herbWidth,
-                });
-            }
+            currentSlide!.addImage({
+                data: `data:image/png;base64,${herbData}`,
+                x: 10 - leftPadding - herbWidth,
+                y: yPos + (blockHeight - herbHeight) / 2,
+                h: herbHeight,
+                w: herbWidth,
+            });
         }
     }
 
+    const fileName = join(import.meta.dir, "..", "data", "presentation.pptx")
+    
     await presentation.writeFile({
-        fileName: join(import.meta.dir, "..", "data", "presentation.pptx"),
+        fileName,
     });
 
-    log([LogStyle.blue], "PPTX", "Generated pptx");
+    log([LogStyle.cyan, LogStyle.italic], "PPTX", `Finished generating. Output file: ${fileName}`);
 }
