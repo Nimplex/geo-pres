@@ -99,23 +99,89 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
                         );
                     });
 
-                    // city name
-                    // -------------------------------------------------------------
                     const options: GenerationOptions = {
                         fontSize: 32,
                         anchor: "top",
                         attributes: { fill: "white" },
                     };
-                    const metrics = textToSVG.getMetrics(city.name, options);
-                    const d = textToSVG.getD(city.name, options);
+
+                    // city name
+                    // -------------------------------------------------------------
+                    const cityNameMetrics = textToSVG.getMetrics(city.name, {
+                        fontSize: 48,
+                        anchor: "top",
+                    });
+                    const cityNameD = textToSVG.getD(city.name, {
+                        fontSize: 48,
+                        anchor: "top",
+                        attributes: {
+                            fill: "white"
+                        }
+                    });
                     entryComposites.push({
                         input: Buffer.from(`
-                        <svg xmlns="http://www.w3.org/2000/svg" width="${metrics.width}" height="${metrics.height}" viewBox="0 0 ${metrics.width} ${metrics.height}">
-                            <path d="${d}" fill="white" />
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${cityNameMetrics.width}" height="${cityNameMetrics.height}" viewBox="0 0 ${cityNameMetrics.width} ${cityNameMetrics.height}">
+                            <path d="${cityNameD}" fill="white" />
                         </svg>
                         `.trim()),
-                        top: Math.round((216 - metrics.height) / 2),
+                        top: Math.round((216 - cityNameMetrics.height) / 2),
                         left: 100
+                    });
+
+                    // powiat
+                    // -------------------------------------------------------------
+                    const cityPowiatMetrics = textToSVG.getMetrics(city.powiat, options);
+                    const cityPowiatD = textToSVG.getD(city.powiat, options);
+                    entryComposites.push({
+                        input: Buffer.from(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${cityPowiatMetrics.width}" height="${cityPowiatMetrics.height}" viewBox="0 0 ${cityPowiatMetrics.width} ${cityPowiatMetrics.height}">
+                            <path d="${cityPowiatD}" fill="white" />
+                        </svg>
+                        `.trim()),
+                        top: Math.round((216 - cityPowiatMetrics.height) / 2),
+                        left: 100 + cityNameMetrics.width + 32
+                    });
+
+                    // population
+                    // -------------------------------------------------------------
+                    const populationMetrics = textToSVG.getMetrics(`${city.totalPopulation} (całkowita)`, options);
+                    const populationD = textToSVG.getD(`${city.totalPopulation} (całkowita)`, options);
+                    entryComposites.push({
+                        input: Buffer.from(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${populationMetrics.width}" height="${populationMetrics.height}" viewBox="0 0 ${populationMetrics.width} ${populationMetrics.height}">
+                            <path d="${populationD}" fill="white" />
+                        </svg>
+                        `.trim()),
+                        top: Math.round((216 - populationMetrics.height) / 2),
+                        left: 100 + cityNameMetrics.width + cityPowiatMetrics.width + (32 * 2)
+                    });
+
+                    // population/km2
+                    // -------------------------------------------------------------
+                    const perKmSquaredMetrics = textToSVG.getMetrics(`${city.populationPerKm} (osób/km^2)`, options);
+                    const perKmSquaredD = textToSVG.getD(`${city.populationPerKm} (osób/km^2)`, options);
+                    entryComposites.push({
+                        input: Buffer.from(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${perKmSquaredMetrics.width}" height="${perKmSquaredMetrics.height}" viewBox="0 0 ${perKmSquaredMetrics.width} ${perKmSquaredMetrics.height}">
+                            <path d="${perKmSquaredD}" fill="white" />
+                        </svg>
+                        `.trim()),
+                        top: Math.round((216 - perKmSquaredMetrics.height) / 2),
+                        left: 100 + cityNameMetrics.width + cityPowiatMetrics.width + populationMetrics.width + (32 * 3)
+                    });
+
+                    // area in km2
+                    // -------------------------------------------------------------
+                    const landMetrics = textToSVG.getMetrics(`${city.areaKm} km^2`, options);
+                    const landD = textToSVG.getD(`${city.areaKm} km^2`, options);
+                    entryComposites.push({
+                        input: Buffer.from(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${landMetrics.width}" height="${landMetrics.height}" viewBox="0 0 ${landMetrics.width} ${landMetrics.height}">
+                            <path d="${landD}" fill="white" />
+                        </svg>
+                        `.trim()),
+                        top: Math.round((216 - landMetrics.height) / 2),
+                        left: 100 + cityNameMetrics.width + cityPowiatMetrics.width + populationMetrics.width + perKmSquaredMetrics.width + (32 * 4)
                     });
 
                     // COA
