@@ -1,36 +1,56 @@
-import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { LogStyle, log } from "./logger";
+import { exit } from "node:process";
+
+import { LogStyle, log, timeEnd, timeStart } from "./logger";
 import type { City, Voivodeship, Map } from "./types";
 
-export const dataDirPath = join(import.meta.dir, "..", "data");
-
 export function parse(data: string) {
+    timeStart("parser");
+
     const voivodeships: Map<Voivodeship> = {};
-
     let currentVoivodeship = "";
+    
+    log(
+        [LogStyle.blue],
+        "PARSER",
+        `Parsing CSV data\n${"-".repeat(65).grey()}`
+    );
 
-    for (const line of data.split("\n")) {
-        const [identifier, name, powiat, areaHa, areaKm, totalPopulation, populationPerKm] = line.trim().split(",");
+    for (const [i, line] of data.split("\n").entries()) {
+        const [
+            identifier,
+            name,
+            powiat,
+            areaHa,
+            areaKm,
+            totalPopulation,
+            populationPerKm
+        ] = line.trim().split(",");
 
-        // our csv is formatted in such way that if the identifier is empty and
-        // name isn't then it's next voivodeship
-        if (identifier == "" && name !== "") {
-            // sort processed voivodeship's cities by population
-            if (currentVoivodeship !== "")
-                voivodeships[currentVoivodeship].sort((a, b) => b.totalPopulation - a.totalPopulation);
-
-            // parse name and set it
-            let voivodeshipName = /woj\. (.+?)  /.exec(name.toLocaleLowerCase());
-
-            if (!voivodeshipName || !voivodeshipName[1]) {
-                log([LogStyle.red], `Error while parsing ${line}, voivodeship name not found`);
-                continue;
+        if (!identifier && name) {
+            if (currentVoivodeship !== "") {
+                voivodeships[currentVoivodeship]
+                    .sort((a, b) => b.totalPopulation - a.totalPopulation);
             }
-            
-            voivodeships[voivodeshipName[1]] = [];
-            currentVoivodeship = voivodeshipName[1];
 
+            const match = /woj\. (.+?)\s{2,}/.exec(name.toLocaleLowerCase());
+
+            if (!match || !match[1]) {
+                log(
+                    [LogStyle.red],
+                    "ERROR",
+                    `Failed to parse voivodeship name\n${i + 1} |  "${line}"`
+                );
+                exit(1);
+            }
+
+            const voivodeshipName = match[1];
+            log(
+                [LogStyle.cyan],
+                "PARSER",
+                `Detected new voivodeship: "${voivodeshipName}"`
+            );
+            voivodeships[voivodeshipName] = [];
+            currentVoivodeship = voivodeshipName;
             continue;
         }
 
@@ -47,16 +67,11 @@ export function parse(data: string) {
         voivodeships[currentVoivodeship].push(cityObject);
     }
 
-    // sort last voivodeship after everything was proccessed
-    voivodeships[currentVoivodeship].sort((a, b) => b.totalPopulation - a.totalPopulation);
+    voivodeships[currentVoivodeship]
+        .sort((a, b) => b.totalPopulation - a.totalPopulation);
+
+    log([LogStyle.blue], "PARSER", "Parsed CSV data");
+    timeEnd("parser");
 
     return voivodeships;
-}
-
-export async function readData() {
-    const filePath = join(dataDirPath, "dane.csv");
-    const fileBuffer = await readFile(filePath);
-    const fileContent = fileBuffer.toString();
-
-    return fileContent;
 }

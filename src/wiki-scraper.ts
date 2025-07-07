@@ -1,12 +1,10 @@
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
-import { dataDirPath } from "./parser";
-import { log, LogStyle } from "./logger";
+import { log, LogStyle, timeStart } from "./logger";
 import type { City, Map, Voivodeship } from "./types";
-
-export const downloadsPathCOA = join(dataDirPath, "coats-of-arms");
-export const downloadsPathBackgrounds = join(dataDirPath, "backgrounds");
+import { paths } from ".";
+import { ensureExists } from "./utils";
 
 export function formatFileName(city: City, suffix = "") {
     return `${city.identifier}+${city.name}${suffix}`.replaceAll(" ", "_");
@@ -71,29 +69,18 @@ async function tryPage(cityName: string, suffix: string, regexes: RegExp[], name
 }
 
 export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
-    try {
-        const makeDownloadDir = async (path: string) => {
-            if (!existsSync(path)) {
-                log([LogStyle.yellow], "WARN", `Downloads directory "${path}" doesn't exist, creating one for you`);
-                await mkdir(path).catch(_ => {
-                    throw new Error(`Error creating directory ${path}`);
-                });
-            }
-        }
+    timeStart("scraper");
+    log([LogStyle.blue], "SCRAPER", `Starting scraping`);
 
-        await makeDownloadDir(downloadsPathCOA);
-        await makeDownloadDir(downloadsPathBackgrounds);
-    } catch (_) {
-        log([LogStyle.red, LogStyle.bold], "ERROR", "Couldn't create downloads directory, exiting...");
-        return process.exit(1);
-    }
-    
+    await ensureExists(paths.COA);
+    await ensureExists(paths.backgrounds);
+
     let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
     const totalEntries = cities.length;
 
     try {
-        const coaFiles = readdirSync(downloadsPathCOA);
-        const backgroundFiles = readdirSync(downloadsPathBackgrounds).map(fileName => fileName.replace(/[.]\w+?$/gm, "")).filter(fileName => {
+        const coaFiles = readdirSync(paths.COA);
+        const backgroundFiles = readdirSync(paths.backgrounds).map(fileName => fileName.replace(/[.]\w+?$/gm, "")).filter(fileName => {
             return coaFiles.find(coaFileName => coaFileName.startsWith(fileName));
         });
         cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, "")));
@@ -170,8 +157,8 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
                     log([LogStyle.red, LogStyle.bold], `ERROR ${errnum}`, err.message.substring(5));
                 }
                 
-                downloads.push(downloadFile(coa, formatFileName(city), downloadsPathCOA).then(checkDownloads).catch(errorHandle));
-                downloads.push(downloadFile(background, formatFileName(city), downloadsPathBackgrounds).then(checkDownloads).catch(errorHandle));
+                downloads.push(downloadFile(coa, formatFileName(city), paths.COA).then(checkDownloads).catch(errorHandle));
+                downloads.push(downloadFile(background, formatFileName(city), paths.backgrounds).then(checkDownloads).catch(errorHandle));
                 pendingDownloads += 2;
 
                 break;
