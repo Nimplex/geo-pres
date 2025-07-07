@@ -136,13 +136,13 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
                         process.exit(1);
                     });
 
-                    const resizedCOA = await sharp(coaBuffer).resize({ height: 216 }).png().toBuffer();
+                    const resizedCOA = await sharp(coaBuffer).resize({ height: 184 }).png().toBuffer();
                     const coaMeta = await sharp(resizedCOA).metadata();
 
                     entryComposites.push({
                         input: resizedCOA,
-                        top: 0,
-                        left: 1920 - (coaMeta.width ?? 0)
+                        top: 16,
+                        left: Math.round(1920 - 125 - ((coaMeta.width ?? 0) / 2))
                     });
 
                     const entryBuffer = await entry.composite(entryComposites).png().toBuffer();

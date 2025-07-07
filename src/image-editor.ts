@@ -16,7 +16,7 @@ const blurness = 5;
 
 async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
     const width = 1920;
-    const height = 216;
+    const height = 212;
 
     const canvas = sharp({
         create: {
@@ -65,28 +65,12 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
 
     const compositeImage = await canvas
         .composite([{ input: imageBuffer, gravity: "west" }])
-        .extract({
-            top: 2,
-            left: 0,
-            width: width,
-            height: height - 4,
-        })
         .extend({
             top: 2,
             bottom: 2,
             background: "#FFFFFF"
         })
-        // .composite([{
-        //     input: Buffer.from(`
-        //     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        //         <rect x="0" y="0" width="${width}" height="2" fill="#FFFFFF" />
-        //         <rect x="0" y="${height - 2}" width="${width}" height="2" fill="#FFFFFF" />
-        //     </svg>
-        //     `.trim()),
-        //     top: 0,
-        //     left: 0
-        // }])
-        .webp()
+        .webp({ quality: 100 })
         .toBuffer();
 
     return compositeImage
