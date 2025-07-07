@@ -4,7 +4,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { downloadsPathBackgrounds, formatFileName } from "./wiki-scraper";
 import { log, LogStyle } from "./logger";
-import type { Map, Voivodeship } from "./types";
+import type { City, Map, Voivodeship } from "./types";
 
 interface EditImageOptions {
     brightness: number;
@@ -12,26 +12,23 @@ interface EditImageOptions {
 }
 
 const brightness = 0.5;
-const blurness = 3;
+const blurness = 5;
 
 async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
     const width = 1920;
     const height = 216;
 
-    // Create a blank canvas (transparent background)
     const canvas = sharp({
         create: {
-            width, 
+            width,
             height,
-            channels: 4,  // RGBA
-            background: { r: 0, g: 0, b: 0, alpha: 1 } // Transparent background
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 1 }
         }
     });
 
-    // Load the image from the URL (or local file)
     let image = sharp(URL);
 
-    // Apply brightness and blur if necessary
     if (options.brightness !== 0) {
         image = image.modulate({ brightness: options.brightness });
     }
@@ -40,7 +37,6 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
         image = image.blur(options.blurness);
     }
 
-    // Get image metadata (for aspect ratio)
     const metadata = await image.metadata();
 
     if (!metadata)
@@ -54,27 +50,46 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
 
     const aspectRatio = metadata.height / metadata.width;
 
-    // Define offsetWidth and calculate the new height for the image
     const offsetWidth = 1670;
     const newHeight = aspectRatio * offsetWidth;
 
     const top = newHeight / 2 < height ? 0 : Math.round(newHeight / 2);
 
-    // Resize the image to fit the desired width
     image = image.resize(offsetWidth, Math.round(Math.max(newHeight, height)));
 
     log([LogStyle.purple], "VERBOSE", `canvas height: ${height}, canvas width: ${width}, offset width: ${offsetWidth}, offsetted height: ${newHeight}, aspect ratio: ${aspectRatio.toFixed(2)}, top padding: ${Math.round(newHeight / 2)}`);
 
     image = image.extract({ height, width: offsetWidth, top, left: 0 });
 
-    // Prepare the image buffer after applying the transformations
     const imageBuffer = await image.toBuffer();
 
-    // Composite the image onto the canvas (background)
-    const compositeImage = canvas.composite([{ input: imageBuffer, gravity: "west" }]).webp();
+    const compositeImage = await canvas
+        .composite([{ input: imageBuffer, gravity: "west" }])
+        .extract({
+            top: 2,
+            left: 0,
+            width: width,
+            height: height - 4,
+        })
+        .extend({
+            top: 2,
+            bottom: 2,
+            background: "#FFFFFF"
+        })
+        // .composite([{
+        //     input: Buffer.from(`
+        //     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        //         <rect x="0" y="0" width="${width}" height="2" fill="#FFFFFF" />
+        //         <rect x="0" y="${height - 2}" width="${width}" height="2" fill="#FFFFFF" />
+        //     </svg>
+        //     `.trim()),
+        //     top: 0,
+        //     left: 0
+        // }])
+        .webp()
+        .toBuffer();
 
-    // Return the final image
-    return compositeImage.toBuffer()
+    return compositeImage
 }
 
 export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
@@ -89,30 +104,38 @@ export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
     }
 
     let processed = 0;
+    const tasks = [];
+
     for await (const city of cities) {
-        const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
+        async function task(city: City) {
+            const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
 
-        if (!fileName) {
-            log([LogStyle.red, LogStyle.bold], "ERROR", `Background file for ${city.name} not found`);
-            continue;
+            if (!fileName) {
+                log([LogStyle.red, LogStyle.bold], "ERROR", `Background file for ${city.name} not found`);
+                return;
+            }
+
+            const filePath = join(downloadsPathBackgrounds, fileName);
+
+            let editedImage = undefined;
+
+            try {
+                editedImage = await prepareBackground(filePath);
+            } catch(err) {
+                log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
+            }
+
+            if (!editedImage) return;
+
+            log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${filePath}'`);
+
+            await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
         }
 
-        const filePath = join(downloadsPathBackgrounds, fileName);
-
-        let editedImage = undefined;
-
-        try {
-            editedImage = await prepareBackground(filePath);
-        } catch(err) {
-            log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
-        }
-
-        if (!editedImage) continue;
-
-        log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${filePath}'`);
-
-        await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
+        tasks.push(task(city))
     }
+
+    await Promise.all(tasks);
 
     log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);
 };

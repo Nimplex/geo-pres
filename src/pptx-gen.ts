@@ -48,113 +48,120 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
     }
 
     log([LogStyle.blue], "PRESGEN", "Generating slides");
+    
+    const tasks = [];
 
     for (const voivodeshipName of Object.keys(voivodeships)) {
         const chunks = chunk(voivodeships[voivodeshipName], 5);
-        const slides = [];
 
         for (const [i, chunk] of chunks.entries()) {
-            const slide = sharp({
-                create: {
-                    width: 1920,
-                    height: 1080,
-                    channels: 4,
-                    background: "#FEFEFE"
-                }
-            });
-
-            const slideComposites: sharp.OverlayOptions[] = [];
-
-            for (const [i, city] of chunk.entries()) {
-                const entryHeight = 216;
-                const yOffset = i * entryHeight;
-
-                const entry = sharp({
+            async function generateSlide(chunk: City[], i: number, voivodeshipName: string) {
+                const slide = sharp({
                     create: {
                         width: 1920,
-                        height: entryHeight,
+                        height: 1080,
                         channels: 4,
-                        background: "#000000"
+                        background: "#FEFEFE"
                     }
                 });
-                const entryComposites: sharp.OverlayOptions[] = [];
 
-                // add background
-                // -------------------------------------------------------------
-                await readFile(
-                    join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp"))
-                ).then(buff => {
+                const slideComposites: sharp.OverlayOptions[] = [];
+
+                for (const [i, city] of chunk.entries()) {
+                    const entryHeight = 216;
+                    const yOffset = i * entryHeight;
+
+                    const entry = sharp({
+                        create: {
+                            width: 1920,
+                            height: entryHeight,
+                            channels: 4,
+                            background: "#000000"
+                        }
+                    });
+                    const entryComposites: sharp.OverlayOptions[] = [];
+
+                    // add background
+                    // -------------------------------------------------------------
+                    await readFile(
+                        join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp"))
+                    ).then(buff => {
+                        entryComposites.push({
+                            input: buff,
+                            top: 0,
+                            left: 0
+                        });
+                    }).catch((err) => {
+                        log(
+                            [LogStyle.red, LogStyle.bold],
+                            "PPTX ERR",
+                            `Couldn't read background image for: ${city.name}, ${err}`
+                        );
+                    });
+
+                    // city name
+                    // -------------------------------------------------------------
+                    const options: GenerationOptions = {
+                        fontSize: 32,
+                        anchor: "top",
+                        attributes: { fill: "white" },
+                    };
+                    const metrics = textToSVG.getMetrics(city.name, options);
+                    const d = textToSVG.getD(city.name, options);
                     entryComposites.push({
-                        input: buff,
+                        input: Buffer.from(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="${metrics.width}" height="${metrics.height}" viewBox="0 0 ${metrics.width} ${metrics.height}">
+                            <path d="${d}" fill="white" />
+                        </svg>
+                        `.trim()),
+                        top: Math.round((216 - metrics.height) / 2),
+                        left: 100
+                    });
+
+                    // COA
+                    // -------------------------------------------------------------
+                    const coaFileName = findCoatOfArms(coaFiles, city);
+                    if (!coaFileName) {
+                        log([LogStyle.yellow, LogStyle.bold], "WARN", `Skipping ${city.name} -- no COA`);
+                        continue;
+                    };
+
+                    const coaBuffer = await readFile(coaFileName).catch(() => {
+                        log(
+                            [LogStyle.bold, LogStyle.red],
+                            "FILE NOT FOUND",
+                            `No COA found for '${city.name}'. This may happen due to errors in scraping. Exiting...`
+                        );
+                        log([LogStyle.bold, LogStyle.purple], "VERBOSE", `${join(downloadsPathCOA, formatFileName(city, ".png"))}`)
+                        process.exit(1);
+                    });
+
+                    const resizedCOA = await sharp(coaBuffer).resize({ height: 216 }).png().toBuffer();
+                    const coaMeta = await sharp(resizedCOA).metadata();
+
+                    entryComposites.push({
+                        input: resizedCOA,
                         top: 0,
+                        left: 1920 - (coaMeta.width ?? 0)
+                    });
+
+                    const entryBuffer = await entry.composite(entryComposites).png().toBuffer();
+                    slideComposites.push({
+                        input: entryBuffer,
+                        top: yOffset,
                         left: 0
                     });
-                }).catch((err) => {
-                    log(
-                        [LogStyle.red, LogStyle.bold],
-                        "PPTX ERR",
-                        `Couldn't read background image for: ${city.name}, ${err}`
-                    );
-                });
+                }
 
-                // city name
-                // -------------------------------------------------------------
-                const options: GenerationOptions = {
-                    fontSize: 32,
-                    anchor: "top",
-                    attributes: { fill: "white" },
-                };
-                const metrics = textToSVG.getMetrics(city.name, options);
-                const d = textToSVG.getD(city.name, options);
-                entryComposites.push({
-                    input: Buffer.from(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="${metrics.width}" height="${metrics.height}" viewBox="0 0 ${metrics.width} ${metrics.height}">
-                        <path d="${d}" fill="white" />
-                    </svg>
-                    `.trim()),
-                    top: Math.round((216 - metrics.height) / 2),
-                    left: 100
-                });
-
-                // COA
-                // -------------------------------------------------------------
-                const coaFileName = findCoatOfArms(coaFiles, city);
-                if (!coaFileName) {
-                    log([LogStyle.yellow, LogStyle.bold], "WARN", `Skipping ${city.name} -- no COA`);
-                    continue;
-                };
-
-                const coaBuffer = await readFile(coaFileName).catch(() => {
-                    log(
-                        [LogStyle.bold, LogStyle.red],
-                        "FILE NOT FOUND",
-                        `No COA found for '${city.name}'. This may happen due to errors in scraping. Exiting...`
-                    );
-                    log([LogStyle.bold, LogStyle.purple], "VERBOSE", `${join(downloadsPathCOA, formatFileName(city, ".png"))}`)
-                    process.exit(1);
-                });
-
-                const resizedCOA = await sharp(coaBuffer).resize({ height: 216 }).png().toBuffer();
-                const coaMeta = await sharp(resizedCOA).metadata();
-
-                entryComposites.push({
-                    input: resizedCOA,
-                    top: 0,
-                    left: 1920 - (coaMeta.width ?? 0)
-                });
-
-                const entryBuffer = await entry.composite(entryComposites).png().toBuffer();
-                slideComposites.push({
-                    input: entryBuffer,
-                    top: yOffset,
-                    left: 0
-                });
+                const slideBuffer = await slide.composite(slideComposites).png().toBuffer();
+                await writeFile(join(slidesPath, `${voivodeshipName}.${i}.png`), slideBuffer);
             }
 
-            const slideBuffer = await slide.composite(slideComposites).png().toBuffer();
-            await writeFile(join(slidesPath, `${voivodeshipName}.${i}.png`), slideBuffer);
+            tasks.push(generateSlide(chunk, i, voivodeshipName));
         }
     }
+
+    await Promise.all(tasks);
 
     // const presentation = new pptxgen();
     // presentation.layout = "LAYOUT_16x9";
