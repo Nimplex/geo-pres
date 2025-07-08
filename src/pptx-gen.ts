@@ -158,7 +158,9 @@ export async function generateSlide(
     let buffer = null;
 
     try {
-        buffer = await slide.composite(slideComposites).png().toBuffer();
+        buffer = await slide.composite(slideComposites).webp({
+            quality: 100
+        }).toBuffer();
     } catch (err) {
         log(
             [LogStyle.red, LogStyle.bold],
@@ -168,7 +170,7 @@ export async function generateSlide(
         );
     }
 
-    const filePath = join(paths.slides, `${voivodeshipName}.${index}.png`);
+    const filePath = join(paths.slides, `${voivodeshipName}.${index}.webp`);
 
     if (!buffer || buffer.length === 0) {
         log(
@@ -180,7 +182,7 @@ export async function generateSlide(
     }
 
     try {
-        await writeFile(filePath, buffer);
+        await writeFile(filePath, Buffer.from(buffer));
     } catch (err) {
         log(
             [LogStyle.red, LogStyle.bold],
