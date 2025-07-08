@@ -24,13 +24,25 @@ impl From<LogStyle> for String {
 }
 
 pub(crate) fn log_msg<const N: usize>(colors: [LogStyle; N], prefix: &str, message: String) {
-    println!(
-        "[{}{prefix:15}\x1b[m] {message}",
-        colors
-            .iter()
-            .map(|x| Into::<String>::into(*x))
-            .collect::<String>()
-    );
+    
+    let lines: Vec<_> = message.lines().collect();
+    if let Some((&first, rest)) = lines.split_first() {
+        println!(
+            "[{}{prefix:15}\x1b[m] {first}",
+            colors
+                .iter()
+                .map(|x| Into::<String>::into(*x))
+                .collect::<String>()
+        );
+
+        for &line in rest {
+            println!(
+                "{}---------------->\x1b[m {line}",
+                LogStyle::Grey,
+            );
+        }
+    }
+
 }
 
 #[macro_export]
