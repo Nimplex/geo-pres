@@ -170,10 +170,17 @@ export async function generateSlide(
 
     if (!buffer) return;
 
-    await writeFile(
-        join(paths.slides, `${voivodeshipName}.${index}.png`),
-        buffer
-    );
+    const filePath = join(paths.slides, `${voivodeshipName}.${index}.png`);
+
+    try {
+        await writeFile(filePath, buffer);
+    } catch (err) {
+        log(
+            [LogStyle.red, LogStyle.bold],
+            "ERROR",
+            `Failed to save slide\nfile path: ${filePath}`
+        );
+    }
 }
 
 export async function generatePresentation(voivodeships: Map<Voivodeship>) {
