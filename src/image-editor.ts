@@ -1,9 +1,12 @@
+import { readdir, writeFile } from "node:fs/promises";
+import { join, parse as parsePath } from "node:path";
 import sharp from "sharp";
-import { writeFile } from "node:fs/promises";
-import { readdirSync } from "node:fs"; 
-import { join } from "node:path";
-import { downloadsPathBackgrounds, formatFileName } from "./wiki-scraper";
-import { log, LogStyle } from "./logger";
+
+import { paths } from ".";
+import { cityHeight, cityWidth } from "./config";
+import { log, LogStyle, timeEnd, timeStart } from "./logger";
+import { formatFileName } from "./wiki-scraper";
+import { ensureExists } from "./utils";
 import type { City, Map, Voivodeship } from "./types";
 
 interface EditImageOptions {
@@ -14,14 +17,15 @@ interface EditImageOptions {
 const brightness = 0.5;
 const blurness = 5;
 
-async function prepareBackground(URL: string, options: EditImageOptions = { brightness, blurness }) {
-    const width = 1920;
-    const height = 212;
-
+async function editBackground(
+    city: City,
+    URL: string,
+    options: EditImageOptions = { brightness, blurness }
+) {
     const canvas = sharp({
         create: {
-            width,
-            height,
+            width: cityWidth,
+            height: cityHeight,
             channels: 4,
             background: { r: 0, g: 0, b: 0, alpha: 1 }
         }
@@ -50,19 +54,27 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
 
     const aspectRatio = metadata.height / metadata.width;
 
-    const offsetWidth = 1670;
-    const newHeight = aspectRatio * offsetWidth;
+    const newHeight = aspectRatio * cityWidth;
 
-    const top = newHeight / 2 < height ? 0 : Math.round(newHeight / 2);
+    const top = newHeight / 2 < cityHeight
+        ? 0
+        : Math.round(newHeight / 2);
 
-    image = image.resize(offsetWidth, Math.round(Math.max(newHeight, height)));
+    image = image.resize(cityWidth, Math.round(Math.max(newHeight, cityHeight)));
 
-    log([LogStyle.purple], "VERBOSE", `canvas height: ${height}, canvas width: ${width}, offset width: ${offsetWidth}, offsetted height: ${newHeight}, aspect ratio: ${aspectRatio.toFixed(2)}, top padding: ${Math.round(newHeight / 2)}`);
+    log(
+        [LogStyle.purple],
+        "VERBOSE",
+        `Processing image ${URL}\nAspect ratio: ${aspectRatio.toFixed(2)}\nCalculated height: ${newHeight}\nTop padding: ${Math.round(newHeight / 2)}`
+    );
 
-    image = image.extract({ height, width: offsetWidth, top, left: 0 });
+    image = image.extract({
+        height: cityHeight,
+        width: cityWidth,
+        top, left: 0
+    });
 
     const imageBuffer = await image.toBuffer();
-
     const compositeImage = await canvas
         .composite([{ input: imageBuffer, gravity: "west" }])
         .extend({
@@ -73,53 +85,102 @@ async function prepareBackground(URL: string, options: EditImageOptions = { brig
         .webp({ quality: 100 })
         .toBuffer();
 
-    return compositeImage
+    await writeFile(
+        join(paths.editedBackgrounds, formatFileName(city) + ".webp"),
+        compositeImage
+    );
 }
 
 export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
-    let cities = Object.keys(voivodeships).map(voivode => voivodeships[voivode].map(city => Object.assign(city, { voivodeship: voivode }))).flat();
+    timeStart("imageEditor");
+    log([LogStyle.blue, LogStyle.bold], "IMAGE EDITOR", "Preparing files");
+
+    const voivodeshipNames = Object.keys(voivodeships);
+
+    await ensureExists(paths.backgrounds);
+    await ensureExists(paths.editedBackgrounds);
+
+    let cities = voivodeshipNames.flatMap(voivodeship =>
+        voivodeships[voivodeship].map(city => ({
+            ...city,
+            voivodeship
+        }))
+    ) as (City & { voivodeship: string })[];
+
     let backgroundFiles: string[] = [];
+    let editedFiles: string[] = [];
 
     try {
-        backgroundFiles = readdirSync(downloadsPathBackgrounds);
-        cities = cities.filter(city => !backgroundFiles.includes(formatFileName(city, ".edited.webp")));
+        editedFiles = await readdir(paths.editedBackgrounds);
+
+        const editedNames = editedFiles.map(file => parsePath(file).name);
+        cities = cities.filter(city => {
+            const formatted = formatFileName(city);
+            return !editedNames.includes(formatted);
+        });
     } catch (err) {
-        log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read downloads directory for existing files: ${err}`);
+        log(
+            [LogStyle.red, LogStyle.bold],
+            "ERROR",
+            "Failed to read edited backgrounds directory",
+            err
+        );
     }
+
+    try {
+        backgroundFiles = await readdir(paths.backgrounds);
+    } catch (err) {
+        log(
+            [LogStyle.red, LogStyle.bold],
+            "ERROR",
+            "Failed to read backgrounds directory",
+            err
+        );
+    }
+
+    log([LogStyle.blue, LogStyle.bold], "IMAGE EDITOR", "Editing images");
 
     let processed = 0;
     const tasks = [];
 
     for await (const city of cities) {
-        async function task(city: City) {
-            const fileName = backgroundFiles.find(fileName => fileName.startsWith(formatFileName(city)));
+        const fileName = backgroundFiles
+            .find(fileName => fileName.startsWith(formatFileName(city)));
 
-            if (!fileName) {
-                log([LogStyle.red, LogStyle.bold], "ERROR", `Background file for ${city.name} not found`);
-                return;
-            }
-
-            const filePath = join(downloadsPathBackgrounds, fileName);
-
-            let editedImage = undefined;
-
-            try {
-                editedImage = await prepareBackground(filePath);
-            } catch(err) {
-                log([LogStyle.bold, LogStyle.red], "ERROR", `Error while preparing background: ${city.name}: ${err}`);
-            }
-
-            if (!editedImage) return;
-
-            log([LogStyle.purple], `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`, `Processed image '${filePath}'`);
-
-            await writeFile(join(downloadsPathBackgrounds, formatFileName(city, ".edited.webp")), Buffer.from(editedImage));
+        if (!fileName) {
+            log(
+                [LogStyle.red, LogStyle.bold],
+                "ERROR",
+                `Background file for ${city.name} not found`
+            );
+            continue;
         }
 
-        tasks.push(task(city))
+        const filePath = join(paths.backgrounds, fileName);
+
+        tasks.push(
+            editBackground(city, filePath).then(function() {
+                log(
+                    [LogStyle.purple],
+                    `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`,
+                    `Processed image "${filePath}"`
+                );
+            }).catch(function(err) {
+                log(
+                    [LogStyle.bold, LogStyle.red],
+                    "ERROR",
+                    `Error while preparing background: ${city.name}`,
+                    err
+                );
+            })
+        );
     }
 
     await Promise.all(tasks);
 
-    log([LogStyle.green], "EDIT", `Processed ${cities.length} images`);
+    log(
+        [LogStyle.blue, LogStyle.bold],
+        "IMAGE EDITOR", `Processed ${cities.length} images`
+    );
+    timeEnd("imageEditor");
 };

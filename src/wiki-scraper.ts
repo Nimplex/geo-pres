@@ -141,7 +141,7 @@ export async function scrapeWiki(voivodeships: Map<Voivodeship>) {
 
         log(
             [LogStyle.cyan],
-            `SCRAPER ${Math.floor(100 * (totalEntries - pending / 2) / totalEntries)}%`,
+            `SCRAPER${(Math.floor(100 * (totalEntries - pending / 2) / totalEntries) + "%").padStart(8, " ")}`,
             `Waiting for downloads: ${pending} remaining...`
         );
     }

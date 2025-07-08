@@ -44,7 +44,7 @@ export function parse(data: string) {
             const voivodeshipName = match[1];
             log(
                 [LogStyle.cyan],
-                `PARSER ${Math.round(i / lines.length * 100)}%`,
+                `PARSER${(Math.round(i / lines.length * 100) + "%").padStart(9, " ")}`,
                 `Detected new voivodeship: "${voivodeshipName}"`
             );
             voivodeships[voivodeshipName] = [];

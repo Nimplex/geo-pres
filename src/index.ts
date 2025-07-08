@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import { exit } from "node:process";
 
 import { log, LogStyle } from "./logger";
-import { scrapeWiki } from "./wiki-scraper";
 import { ensureExists } from "./utils";
 import { parse } from "./parser";
+import { scrapeWiki } from "./wiki-scraper";
+import { editBackgrounds } from "./image-editor";
 
-// import { editBackgrounds } from "./image-editor";
 // import { generatePresentation } from "./pptx-gen";
 
 const dataPath = join(import.meta.dir, "..", "data")
@@ -38,7 +38,7 @@ async function main() {
     const voivodeships = parse(data.toString());
 
     await scrapeWiki(voivodeships);
-    // await editBackgrounds(voivodeships);
+    await editBackgrounds(voivodeships);
     // await generatePresentation(voivodeships);
 }
 
