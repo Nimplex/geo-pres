@@ -11,7 +11,6 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@imgly/background-removal-node": "^1.4.5",
     "pptxgenjs": "^3.12.0",
     "sharp": "^0.33.5",
     "text-to-svg": "^3.1.5"

@@ -164,7 +164,7 @@ export async function editAssets(voivodeships: Map<Voivodeship>) {
                     editBackground(city, inputPath).then(() => {
                         log(
                             [LogStyle.purple],
-                            `EDIT_BG ${(++processedBg).toString().padStart(4, " ")}`,
+                            `EDIT_BG ${(++processedBg).toString().padStart(7, " ")}`,
                             `Processed: ${city.name}`
                         );
                     }).catch(err => {
@@ -193,7 +193,7 @@ export async function editAssets(voivodeships: Map<Voivodeship>) {
                     editCOA(city, inputPath).then(() => {
                         log(
                             [LogStyle.cyan],
-                            `EDIT_COA ${(++processedCoa).toString().padStart(4, " ")}`,
+                            `EDIT_COA ${(++processedCoa).toString().padStart(6, " ")}`,
                             `Processed: ${city.name}`
                         );
                     }).catch(err => {
