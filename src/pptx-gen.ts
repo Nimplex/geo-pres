@@ -168,9 +168,16 @@ export async function generateSlide(
         );
     }
 
-    if (!buffer) return;
-
     const filePath = join(paths.slides, `${voivodeshipName}.${index}.png`);
+
+    if (!buffer || buffer.length === 0) {
+        log(
+            [LogStyle.red, LogStyle.bold],
+            "ERROR",
+            `Buffer is empty before writing ${filePath}`
+        );
+        return;
+    }
 
     try {
         await writeFile(filePath, buffer);
