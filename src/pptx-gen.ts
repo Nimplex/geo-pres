@@ -1,8 +1,9 @@
 import sharp from "sharp";
-import { join } from "node:path";
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { exit } from "node:process";
+import pLimit from "p-limit";
 import TextToSVG from "text-to-svg";
+import { join } from "node:path";
+import { open, readdir, readFile } from "node:fs/promises";
+import { exit } from "node:process";
 
 import { paths } from ".";
 import { formatFileName } from "./wiki-scraper";
@@ -132,7 +133,7 @@ export async function generateSlide(
                     <svg xmlns="http://www.w3.org/2000/svg" width="${metrics.width}" height="${metrics.height}" viewBox="0 0 ${metrics.width} ${metrics.height}">
                         <path d="${d}" fill="white"/>
                     </svg>
-                `.trim()),
+                `.trim(), "utf-8"),
                 top: Math.round((cityHeight - metrics.height) / 2),
                 left: leftOffset
             });
@@ -180,14 +181,19 @@ export async function generateSlide(
     }
 
     try {
-        await writeFile(filePath, Buffer.from(buffer));
+        const fileHandle = await open(filePath, "w");
+        await fileHandle.writeFile(buffer);
+        await fileHandle.sync(); // flush to disk
+        await fileHandle.close();
     } catch (err) {
         log(
             [LogStyle.red, LogStyle.bold],
             "ERROR",
-            `Failed to save slide\nfile path: ${filePath}`
+            `Failed to save slide\nfile path: ${filePath}\n${err}`
         );
+        throw err;
     }
+
 
     return filePath;
 }
@@ -204,15 +210,13 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
     try {
         coaFiles = await readdir(paths.COA);
     } catch (err) {
-        log(
-            [LogStyle.red, LogStyle.bold],
-            "ERROR", `Couldn't read COA directory`,
-            err
-        );
+        log([LogStyle.red, LogStyle.bold], "ERROR", `Couldn't read COA directory`, err);
         exit(1);
     }
 
     log([LogStyle.blue], "PRESGEN", "Generating slides");
+
+    const limit = pLimit(4);
     const tasks = [];
 
     for (const voivodeshipName of Object.keys(voivodeships)) {
@@ -220,24 +224,28 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
 
         for (const [chunkIndex, cities] of cityChunks.entries()) {
             tasks.push(
-                generateSlide(cities, chunkIndex, voivodeshipName, coaFiles)
-                    .then(function(path) {
-                        log(
-                            [LogStyle.cyan],
-                            "PRESGEN",
-                            "Processed\n",
-                            cities.map(({ name }) => name).join("\n"),
-                            `\n${path}`
-                        );
-                    }).catch(function(err) {
-                        log(
-                            [LogStyle.bold, LogStyle.red],
-                            "ERROR",
-                            "Error while generating slide\n",
-                            cities.map(({ name }) => name).join("\n"),
-                            `\n${err}`
-                        );
-                    })
+                limit(() =>
+                    generateSlide(cities, chunkIndex, voivodeshipName, coaFiles)
+                        .then(function (path) {
+                            if (!path) throw new Error("Slide returned null");
+                            log(
+                                [LogStyle.cyan],
+                                "PRESGEN",
+                                "Processed\n",
+                                cities.map(({ name }) => name).join("\n"),
+                                `\n${path}`
+                            );
+                        })
+                        .catch(function (err) {
+                            log(
+                                [LogStyle.bold, LogStyle.red],
+                                "ERROR",
+                                "Error while generating slide\n",
+                                cities.map(({ name }) => name).join("\n"),
+                                `\n${err}`
+                            );
+                        })
+                )
             );
         }
     }
