@@ -20,7 +20,7 @@ export const paths = {
 }
 
 async function main() {
-    log([LogStyle.blue], "MAIN", "Starting GeoPres");
+    log([LogStyle.blue, LogStyle.bold], "MAIN", "Starting GeoPres");
 
     await ensureExists(dataPath);
 
