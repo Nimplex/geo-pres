@@ -10,12 +10,14 @@ export function parse(data: string) {
     let currentVoivodeship = "";
     
     log(
-        [LogStyle.blue],
+        [LogStyle.blue, LogStyle.bold],
         "PARSER",
         `Parsing CSV data\n${"-".repeat(65).grey()}`
     );
 
-    for (const [i, line] of data.split("\n").entries()) {
+    const lines = data.split("\n");
+
+    for (const [i, line] of lines.entries()) {
         const [
             identifier,
             name,
@@ -46,7 +48,7 @@ export function parse(data: string) {
             const voivodeshipName = match[1];
             log(
                 [LogStyle.cyan],
-                "PARSER",
+                `PARSER ${Math.round(i / lines.length * 100)}%`,
                 `Detected new voivodeship: "${voivodeshipName}"`
             );
             voivodeships[voivodeshipName] = [];
@@ -70,7 +72,7 @@ export function parse(data: string) {
     voivodeships[currentVoivodeship]
         .sort((a, b) => b.totalPopulation - a.totalPopulation);
 
-    log([LogStyle.blue], "PARSER", "Parsed CSV data");
+    log([LogStyle.blue, LogStyle.bold], "PARSER", "Parsed CSV data");
     timeEnd("parser");
 
     return voivodeships;
