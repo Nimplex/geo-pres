@@ -2,13 +2,13 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { exit } from "node:process";
 
-import { log, LogStyle } from "./logger";
+import { log, LogStyle, timeEnd, timeStart } from "./logger";
 import { ensureExists } from "./utils";
 import { parse } from "./parser";
 import { scrapeWiki } from "./wiki-scraper";
 import { editBackgrounds } from "./image-editor";
+import { generatePresentation } from "./pptx-gen";
 
-// import { generatePresentation } from "./pptx-gen";
 
 const dataPath = join(import.meta.dir, "..", "data")
 export const paths = {
@@ -20,6 +20,7 @@ export const paths = {
 }
 
 async function main() {
+    timeStart("main");
     log([LogStyle.blue, LogStyle.bold], "MAIN", "Starting GeoPres");
 
     await ensureExists(dataPath);
@@ -39,7 +40,9 @@ async function main() {
 
     await scrapeWiki(voivodeships);
     await editBackgrounds(voivodeships);
-    // await generatePresentation(voivodeships);
+    await generatePresentation(voivodeships);
+
+    timeEnd("main");
 }
 
 await main();

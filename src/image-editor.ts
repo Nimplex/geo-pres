@@ -25,7 +25,7 @@ async function editBackground(
     const canvas = sharp({
         create: {
             width: cityWidth,
-            height: cityHeight,
+            height: cityHeight - 4,
             channels: 4,
             background: { r: 0, g: 0, b: 0, alpha: 1 }
         }
@@ -69,7 +69,7 @@ async function editBackground(
     );
 
     image = image.extract({
-        height: cityHeight,
+        height: cityHeight - 4,
         width: cityWidth,
         top, left: 0
     });

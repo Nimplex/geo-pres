@@ -58,6 +58,6 @@ export function timeEnd(label: string) {
     if (start == undefined)
         throw new Error(`No timer found for label "${label}"`);
 
-    log([LogStyle.grey, LogStyle.italic], "TIMER", `Job "${label.cyan()}" ended, duration: ${Date.now() - start}ms`);
+    log([LogStyle.grey, LogStyle.italic], "TIMER", `Job "${label.cyan()}" ended, duration: ${(Date.now() - start) / 1000}s`);
     timeMap.delete(label);
 }
