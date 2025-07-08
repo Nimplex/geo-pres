@@ -190,6 +190,8 @@ export async function generateSlide(
             `Failed to save slide\nfile path: ${filePath}`
         );
     }
+
+    return filePath;
 }
 
 export async function generatePresentation(voivodeships: Map<Voivodeship>) {
@@ -221,18 +223,21 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
         for (const [chunkIndex, cities] of cityChunks.entries()) {
             tasks.push(
                 generateSlide(cities, chunkIndex, voivodeshipName, coaFiles)
-                    .then(function() {
+                    .then(function(path) {
                         log(
                             [LogStyle.cyan],
                             "PRESGEN",
-                            `Processed ${cities.map(({ name }) => name).join(", ")} (${voivodeshipName}.${chunkIndex}.png)`
+                            "Processed\n",
+                            cities.map(({ name }) => name).join("\n"),
+                            `\n${path}`
                         );
                     }).catch(function(err) {
                         log(
                             [LogStyle.bold, LogStyle.red],
                             "ERROR",
-                            `Error while generating slide: ${cities.map(({ name }) => name).join(", ")}`,
-                            err
+                            "Error while generating slide\n",
+                            cities.map(({ name }) => name).join("\n"),
+                            `\n${err}`
                         );
                     })
             );
