@@ -6,7 +6,7 @@ export async function ensureExists(path: string) {
     try {
         await access(path, constants.F_OK);
     } catch {
-        log([LogStyle.yellow], "WARN", "Missing \"data\" directory, creating one");
+        log([LogStyle.yellow], "WARN", `Missing "${path}" directory, creating one`);
         
         try {
             await mkdir(path);

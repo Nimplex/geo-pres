@@ -9,11 +9,7 @@ export function parse(data: string) {
     const voivodeships: Map<Voivodeship> = {};
     let currentVoivodeship = "";
     
-    log(
-        [LogStyle.blue, LogStyle.bold],
-        "PARSER",
-        `Parsing CSV data\n${"-".repeat(65).grey()}`
-    );
+    log([LogStyle.blue, LogStyle.bold], "PARSER", "Parsing CSV data");
 
     const lines = data.split("\n");
 
