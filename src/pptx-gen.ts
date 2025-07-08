@@ -61,7 +61,7 @@ export async function generateSlide(
         try {
             const backgroundPath = join(
                 paths.editedBackgrounds,
-                formatFileName(city) + ".png"
+                formatFileName(city) + ".webp"
             );
             const bgBuffer = await readFile(backgroundPath);
             entryComposites.push({ input: bgBuffer, top: 0, left: 0 });
