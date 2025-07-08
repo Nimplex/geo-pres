@@ -25,7 +25,7 @@ impl From<LogStyle> for String {
 
 pub(crate) fn log_msg<const N: usize>(colors: [LogStyle; N], prefix: &str, message: String) {
     println!(
-        "[{}{prefix:15}] {message}",
+        "[{}{prefix:15}\x1b[m] {message}",
         colors
             .iter()
             .map(|x| Into::<String>::into(*x))
