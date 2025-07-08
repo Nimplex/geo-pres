@@ -1,25 +1,26 @@
+import sharp from "sharp";
 import { readdir, writeFile } from "node:fs/promises";
 import { join, parse as parsePath } from "node:path";
-import sharp from "sharp";
+import { exit } from "node:process";
 
 import { paths } from ".";
 import { cityHeight, cityWidth } from "./config";
-import { log, LogStyle, timeEnd, timeStart } from "./logger";
+import { log, LogStyle, timeStart, timeEnd } from "./logger";
 import { formatFileName } from "./wiki-scraper";
 import { ensureExists } from "./utils";
 import type { City, Map, Voivodeship } from "./types";
+
+const brightness = 0.5;
+const blurness = 5;
 
 interface EditImageOptions {
     brightness: number;
     blurness: number;
 }
 
-const brightness = 0.5;
-const blurness = 5;
-
 async function editBackground(
     city: City,
-    URL: string,
+    inputPath: string,
     options: EditImageOptions = { brightness, blurness }
 ) {
     const canvas = sharp({
@@ -31,7 +32,7 @@ async function editBackground(
         }
     });
 
-    let image = sharp(URL);
+    let image = sharp(inputPath);
 
     if (options.brightness !== 0) {
         image = image.modulate({ brightness: options.brightness });
@@ -42,145 +43,178 @@ async function editBackground(
     }
 
     const metadata = await image.metadata();
-
-    if (!metadata)
-        throw new Error("Undefined image metadata");
-
-    if (!metadata.height)
-        throw new Error("Undefined image height");
-
-    if (!metadata.width)
-        throw new Error("Undefined image width");
+    if (!metadata?.height || !metadata?.width)
+        throw new Error(`Missing metadata for image: ${inputPath}`);
 
     const aspectRatio = metadata.height / metadata.width;
-
     const newHeight = aspectRatio * cityWidth;
+    const top = newHeight / 2 < cityHeight ? 0 : Math.round(newHeight / 2);
 
-    const top = newHeight / 2 < cityHeight
-        ? 0
-        : Math.round(newHeight / 2);
+    image = image
+        .resize(cityWidth, Math.round(Math.max(newHeight, cityHeight)))
+        .extract({
+            height: cityHeight - 4,
+            width: cityWidth,
+            top,
+            left: 0
+        });
 
-    image = image.resize(cityWidth, Math.round(Math.max(newHeight, cityHeight)));
+    const buffer = await image.toBuffer();
 
-    log(
-        [LogStyle.purple],
-        "VERBOSE",
-        `Processing image ${URL}\nAspect ratio: ${aspectRatio.toFixed(2)}\nCalculated height: ${newHeight}\nTop padding: ${Math.round(newHeight / 2)}`
-    );
-
-    image = image.extract({
-        height: cityHeight - 4,
-        width: cityWidth,
-        top, left: 0
-    });
-
-    const imageBuffer = await image.toBuffer();
-    const compositeImage = await canvas
-        .composite([{ input: imageBuffer, gravity: "west" }])
-        .extend({
-            top: 2,
-            bottom: 2,
-            background: "#FFFFFF"
-        })
+    const final = await canvas
+        .composite([{ input: buffer }])
+        .extend({ top: 2, bottom: 2, background: "#FFFFFF" })
         .webp({ quality: 100 })
         .toBuffer();
 
     await writeFile(
         join(paths.editedBackgrounds, formatFileName(city) + ".webp"),
-        compositeImage
+        final
     );
 }
 
-export async function editBackgrounds(voivodeships: Map<Voivodeship>) {
-    timeStart("imageEditor");
-    log([LogStyle.blue, LogStyle.bold], "IMAGE EDITOR", "Preparing files");
+async function editCOA(city: City, inputPath: string) {
+    const outputPath = join(paths.editedCOA, formatFileName(city) + ".png");
 
-    const voivodeshipNames = Object.keys(voivodeships);
+    let image = sharp(inputPath);
+
+    if (parsePath(inputPath).ext.toLowerCase() == ".jpg") {
+        log(
+            [LogStyle.yellow],
+            "EDIT_COA",
+            `Detected .jpg file, converting to png: ${city.name}`
+        );
+    }
+
+    const buffer = await image.png().toBuffer();
+
+    await writeFile(outputPath, buffer);
+}
+
+export async function editAssets(voivodeships: Map<Voivodeship>) {
+    timeStart("iamgeEditor");
 
     await ensureExists(paths.backgrounds);
     await ensureExists(paths.editedBackgrounds);
+    await ensureExists(paths.COA);
+    await ensureExists(paths.editedCOA);
 
-    let cities = voivodeshipNames.flatMap(voivodeship =>
-        voivodeships[voivodeship].map(city => ({
-            ...city,
-            voivodeship
-        }))
-    ) as (City & { voivodeship: string })[];
+    const cities = Object
+        .entries(voivodeships)
+        .flatMap(([voivodeship, cities]) =>
+            cities.map(city => ({ ...city, voivodeship }))
+        );
 
     let backgroundFiles: string[] = [];
-    let editedFiles: string[] = [];
-
-    try {
-        editedFiles = await readdir(paths.editedBackgrounds);
-
-        const editedNames = editedFiles.map(file => parsePath(file).name);
-        cities = cities.filter(city => {
-            const formatted = formatFileName(city);
-            return !editedNames.includes(formatted);
-        });
-    } catch (err) {
-        log(
-            [LogStyle.red, LogStyle.bold],
-            "ERROR",
-            "Failed to read edited backgrounds directory",
-            err
-        );
-    }
+    let editedBackgrounds: Set<string> = new Set();
+    let coaFiles: string[] = [];
+    let editedCOAs: Set<string> = new Set();
 
     try {
         backgroundFiles = await readdir(paths.backgrounds);
+        editedBackgrounds = new Set(
+            (await readdir(paths.editedBackgrounds)
+        ).map(f => parsePath(f).name));
     } catch (err) {
         log(
             [LogStyle.red, LogStyle.bold],
             "ERROR",
-            "Failed to read backgrounds directory",
+            "Failed to read background directories",
             err
         );
+        exit(1);
     }
 
-    log([LogStyle.blue, LogStyle.bold], "IMAGE EDITOR", "Editing images");
+    try {
+        coaFiles = await readdir(paths.COA);
+        editedCOAs = new Set(
+            (await readdir(paths.editedCOA)
+        ).map(f => parsePath(f).name));
+    } catch (err) {
+        log(
+            [LogStyle.red, LogStyle.bold],
+            "ERROR",
+            "Failed to read COA directories",
+            err
+        );
+        exit(1);
+    }
 
-    let processed = 0;
-    const tasks = [];
+    const backgroundTasks: Promise<void>[] = [];
+    const coaTasks: Promise<void>[] = [];
 
-    for await (const city of cities) {
-        const fileName = backgroundFiles
-            .find(fileName => fileName.startsWith(formatFileName(city)));
+    let processedBg = 0;
+    let processedCoa = 0;
 
-        if (!fileName) {
-            log(
-                [LogStyle.red, LogStyle.bold],
-                "ERROR",
-                `Background file for ${city.name} not found`
-            );
-            continue;
+    for (const city of cities) {
+        const cityFileName = formatFileName(city);
+
+        if (!editedBackgrounds.has(cityFileName)) {
+            const backgroundFile = backgroundFiles
+                .find(f => f.startsWith(cityFileName));
+            if (!backgroundFile) {
+                log(
+                    [LogStyle.yellow],
+                    "WARN",
+                    `No background for ${city.name}, skipping`
+                );
+            } else {
+                const inputPath = join(paths.backgrounds, backgroundFile);
+                backgroundTasks.push(
+                    editBackground(city, inputPath).then(() => {
+                        log(
+                            [LogStyle.purple],
+                            `EDIT_BG ${(++processedBg).toString().padStart(4, " ")}`,
+                            `Processed: ${city.name}`
+                        );
+                    }).catch(err => {
+                        log(
+                            [LogStyle.red],
+                            "ERROR",
+                            `Failed editing background: ${city.name}`,
+                            err
+                        );
+                    })
+                );
+            }
         }
 
-        const filePath = join(paths.backgrounds, fileName);
-
-        tasks.push(
-            editBackground(city, filePath).then(function() {
+        if (!editedCOAs.has(cityFileName)) {
+            const coaFile = coaFiles.find(f => f.startsWith(cityFileName));
+            if (!coaFile) {
                 log(
-                    [LogStyle.purple],
-                    `EDIT${(Math.floor((++processed / cities.length) * 100).toString() + "%").padStart(11, " ")}`,
-                    `Processed image "${filePath}"`
+                    [LogStyle.yellow],
+                    "WARN",
+                    `No COA for ${city.name}, skipping`
                 );
-            }).catch(function(err) {
-                log(
-                    [LogStyle.bold, LogStyle.red],
-                    "ERROR",
-                    `Error while preparing background: ${city.name}`,
-                    err
+            } else {
+                const inputPath = join(paths.COA, coaFile);
+                coaTasks.push(
+                    editCOA(city, inputPath).then(() => {
+                        log(
+                            [LogStyle.cyan],
+                            `EDIT_COA ${(++processedCoa).toString().padStart(4, " ")}`,
+                            `Processed: ${city.name}`
+                        );
+                    }).catch(err => {
+                        log(
+                            [LogStyle.red],
+                            "ERROR",
+                            `Failed editing COA: ${city.name}`,
+                            err
+                        );
+                    })
                 );
-            })
-        );
+            }
+        }
     }
 
-    await Promise.all(tasks);
+    await Promise.all([...backgroundTasks, ...coaTasks]);
 
     log(
         [LogStyle.blue, LogStyle.bold],
-        "IMAGE EDITOR", `Processed ${cities.length} images`
+        "IMAGE EDITOR",
+        `Processed ${processedBg.toString().green()}/${cities.length} backgrounds and ${processedCoa.toString().green()}/${cities.length} COAs`
     );
-    timeEnd("imageEditor");
-};
+    timeEnd("iamgeEditor");
+}

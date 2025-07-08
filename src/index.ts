@@ -6,7 +6,7 @@ import { log, LogStyle, timeEnd, timeStart } from "./logger";
 import { ensureExists } from "./utils";
 import { parse } from "./parser";
 import { scrapeWiki } from "./wiki-scraper";
-import { editBackgrounds } from "./image-editor";
+import { editAssets } from "./image-editor";
 import { generatePresentation } from "./pptx-gen";
 
 
@@ -14,6 +14,7 @@ const dataPath = join(import.meta.dir, "..", "data")
 export const paths = {
     data: dataPath,
     COA: join(dataPath, "coats-of-arms"),
+    editedCOA: join(dataPath, "edited-coats-of-arms"),
     backgrounds: join(dataPath, "backgrounds"),
     editedBackgrounds: join(dataPath, "edited-backgrounds"),
     slides: join(dataPath, "slides")
@@ -39,7 +40,7 @@ async function main() {
     const voivodeships = parse(data.toString());
 
     await scrapeWiki(voivodeships);
-    await editBackgrounds(voivodeships);
+    await editAssets(voivodeships);
     await generatePresentation(voivodeships);
 
     timeEnd("main");
