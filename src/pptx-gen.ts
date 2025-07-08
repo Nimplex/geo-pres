@@ -61,7 +61,7 @@ export async function generateSlide(
         try {
             const backgroundPath = join(
                 paths.editedBackgrounds,
-                formatFileName(city) + ".webp"
+                formatFileName(city) + ".png"
             );
             const bgBuffer = await readFile(backgroundPath);
             entryComposites.push({ input: bgBuffer, top: 0, left: 0 });
@@ -158,9 +158,7 @@ export async function generateSlide(
     let buffer = null;
 
     try {
-        buffer = await slide.composite(slideComposites).webp({
-            quality: 100
-        }).toBuffer();
+        buffer = await slide.composite(slideComposites).png().toBuffer();
     } catch (err) {
         log(
             [LogStyle.red, LogStyle.bold],
@@ -170,7 +168,7 @@ export async function generateSlide(
         );
     }
 
-    const filePath = join(paths.slides, `${voivodeshipName}.${index}.webp`);
+    const filePath = join(paths.slides, `${voivodeshipName}.${index}.png`);
 
     if (!buffer || buffer.length === 0) {
         log(
@@ -190,6 +188,8 @@ export async function generateSlide(
             `Failed to save slide\nfile path: ${filePath}`
         );
     }
+
+    return filePath;
 }
 
 export async function generatePresentation(voivodeships: Map<Voivodeship>) {
@@ -221,18 +221,21 @@ export async function generatePresentation(voivodeships: Map<Voivodeship>) {
         for (const [chunkIndex, cities] of cityChunks.entries()) {
             tasks.push(
                 generateSlide(cities, chunkIndex, voivodeshipName, coaFiles)
-                    .then(function() {
+                    .then(function(path) {
                         log(
                             [LogStyle.cyan],
                             "PRESGEN",
-                            `Processed ${cities.map(({ name }) => name).join(", ")} (${voivodeshipName}.${chunkIndex}.png)`
+                            "Processed\n",
+                            cities.map(({ name }) => name).join("\n"),
+                            `\n${path}`
                         );
                     }).catch(function(err) {
                         log(
                             [LogStyle.bold, LogStyle.red],
                             "ERROR",
-                            `Error while generating slide: ${cities.map(({ name }) => name).join(", ")}`,
-                            err
+                            "Error while generating slide\n",
+                            cities.map(({ name }) => name).join("\n"),
+                            `\n${err}`
                         );
                     })
             );
