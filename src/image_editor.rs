@@ -1,9 +1,6 @@
+use crate::paths::Paths;
 use std::fs;
 use std::path::Path;
-
-use image;
-
-use crate::paths::Paths;
 
 fn ensure_exists(path: &Path) -> std::io::Result<()> {
     if !path.exists() {
