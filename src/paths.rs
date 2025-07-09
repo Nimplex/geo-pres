@@ -1,7 +1,8 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 pub struct Paths {
-    pub data: PathBuf,
+    pub data_dir: PathBuf,
+    pub dataset: PathBuf,
     pub coa: PathBuf,
     pub edited_coa: PathBuf,
     pub backgrounds: PathBuf,
@@ -11,9 +12,10 @@ pub struct Paths {
 
 impl Paths {
     pub fn new(base_dir: PathBuf) -> Self {
-        let data = base_dir.join("data");
+        let data = base_dir.join(r"../data");
         Self {
-            data: data.clone(),
+            data_dir: data.clone(),
+            dataset: data.join("dane.csv"),
             coa: data.join("coats-of-arms"),
             edited_coa: data.join("edited-coats-of-arms"),
             backgrounds: data.join("backgrounds"),
