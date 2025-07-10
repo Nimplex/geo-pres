@@ -1,8 +1,10 @@
-use crate::image_editor::process_assets;
-use crate::logger::{LogStyle, log_msg};
-use crate::parser::{Voivodeship, parse_csv};
-use crate::paths::Paths;
-use crate::scraper::scrape;
+use crate::{
+    image_editor::process_assets,
+    logger::{LogStyle, log_msg},
+    parser::{Voivodeship, parse_csv},
+    paths::Paths,
+    scraper::scrape,
+};
 use std::error::Error;
 
 mod image_editor;
@@ -12,7 +14,7 @@ mod paths;
 mod scraper;
 mod utils;
 
-fn display_table(dataset: &[Option<Voivodeship>]) {
+fn display_table(dataset: &[Voivodeship]) {
     log!(
         [LogStyle::Blue],
         "TABLE",
@@ -23,7 +25,7 @@ fn display_table(dataset: &[Option<Voivodeship>]) {
         "Area (km²)"
     );
 
-    for voivodeship in dataset.iter().flatten() {
+    for voivodeship in dataset.iter() {
         for city in &voivodeship.content {
             log!(
                 [LogStyle::Blue],
@@ -46,10 +48,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let paths = Paths::new()?;
 
     let dataset = parse_csv(&paths.dataset)?;
-
     display_table(&dataset);
-
-    scrape(&paths, &dataset).await?;
+    scrape(&paths, dataset).await?;
 
     process_assets(&paths).await?;
 

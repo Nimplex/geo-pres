@@ -1,29 +1,29 @@
+use crate::{
+    log,
+    logger::{LogStyle, log_msg},
+    parser::{City, VOIVODESHIP_COUNT, Voivodeship},
+    paths::Paths,
+    utils::{ensure_exists, format_file_name},
+};
 use regex::Regex;
 use reqwest::Error;
 use std::{
     collections::{HashMap, HashSet},
+    fs::{DirEntry, read_dir},
     path::Path,
-};
-use tokio::fs::{DirEntry, read_dir};
-
-use crate::{
-    log,
-    logger::{LogStyle, log_msg},
-    parser::{City, Voivodeship},
-    paths::Paths,
-    utils::{ensure_exists, format_file_name},
 };
 
 fn file_stem(entry: &DirEntry) -> Option<String> {
-    entry.file_name().to_str().and_then(|name| {
-        Path::new(name)
+    Some(
+        Path::new(&entry.file_name())
             .file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(|s| s.to_owned())
-    })
+            .unwrap()
+            .to_str()?
+            .to_owned(),
+    )
 }
 
-async fn try_page(city: &City, suffix: String) -> Result<String, Error> {
+async fn try_page(city: &City, suffix: &str) -> Result<String, Error> {
     let city_link = format!("{}{}", city.name, suffix).replace(" ", "_");
     let url = format!("https://pl.wikipedia.org/wiki/{}", city_link);
 
@@ -33,36 +33,37 @@ async fn try_page(city: &City, suffix: String) -> Result<String, Error> {
     Ok(text)
 }
 
-pub async fn scrape(paths: &Paths, dataset: &[Option<Voivodeship>]) -> std::io::Result<()> {
+pub async fn scrape(
+    paths: &Paths,
+    dataset: [Voivodeship; VOIVODESHIP_COUNT],
+) -> std::io::Result<()> {
     ensure_exists(&paths.coa)?;
     ensure_exists(&paths.backgrounds)?;
 
     log!([LogStyle::Blue], "SCRAPER", "Checking for existing entries");
 
     let mut backgrounds_stems = HashSet::new();
-    let mut background_files = read_dir(&paths.backgrounds).await?;
-    while let Some(entry) = background_files.next_entry().await? {
-        if let Some(stem) = file_stem(&entry) {
+    for entry in read_dir(&paths.backgrounds)? {
+        if let Some(stem) = file_stem(&entry?) {
             backgrounds_stems.insert(stem);
         }
     }
 
     let mut coa_stems = HashSet::new();
-    let mut coa_files = read_dir(&paths.coa).await?;
-    while let Some(entry) = coa_files.next_entry().await? {
-        if let Some(stem) = file_stem(&entry) {
+    for entry in read_dir(&paths.coa)? {
+        if let Some(stem) = file_stem(&entry?) {
             coa_stems.insert(stem);
         }
     }
 
     let mut cities = Vec::new();
-    for voivodeship in dataset.iter().flatten() {
-        for city in &voivodeship.content {
+    for voivodeship in dataset.iter() {
+        for city in voivodeship.content.iter() {
             let filename = format_file_name(&city);
             let has_bg = backgrounds_stems.contains(&filename);
             let has_coa = coa_stems.contains(&filename);
             if !(has_bg && has_coa) {
-                cities.push(city.clone());
+                cities.push(city);
             }
         }
     }
@@ -74,52 +75,52 @@ pub async fn scrape(paths: &Paths, dataset: &[Option<Voivodeship>]) -> std::io::
         cities.len()
     );
 
-    let mut name_counts: HashMap<String, usize> = HashMap::new();
-    for city in &cities {
-        *name_counts.entry(city.name.clone()).or_default() += 1;
-    }
-
-    for city in &mut cities {
-        if let Some(count) = name_counts.get(&city.name) {
-            if *count > 1 {
-                city.repeating = true;
-            }
+    let repeating_names: HashSet<&str> = {
+        let mut name_counts: HashMap<&str, usize> = HashMap::new();
+        for city in &cities {
+            *name_counts.entry(&city.name).or_default() += 1;
         }
-    }
 
-    let regexes_list = vec![
-        vec![
+        name_counts
+            .iter()
+            .filter_map(|(&name, &count)| if count > 1 { Some(name) } else { None })
+            .collect()
+    };
+
+    let regexes_list = [
+        [
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#),
             Regex::new(r#"<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#),
         ],
-        vec![
+        [
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#),
             Regex::new(r#".*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#),
         ],
-        vec![
+        [
             Regex::new(r#"<img .*?src="(.+?COA.+?)".*?>"#),
             Regex::new(r#"<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#),
         ],
     ];
 
-    for (i, city) in cities.iter().enumerate() {
-        if city.repeating {
+    for &city in &cities {
+        let repeating = repeating_names.contains(&*city.name);
+        if repeating {
             log!(
-                [LogStyle::Yellow],
+                [LogStyle::Cyan],
                 "REPEATING",
                 "Trying reversed suffixes for '{}'",
                 city.name
             );
         }
 
-        let mut suffixes = vec![
-            "".into(),
-            "_(miasto)".into(),
-            format!("_(województwo_{})", city.voivodeship),
-            format!("_(powiat {})", city.powiat),
+        let mut suffixes = [
+            "",
+            "_(miasto)",
+            &format!("_(województwo_{})", city.voivodeship),
+            &format!("_(powiat_{})", city.powiat),
         ];
 
-        if city.repeating {
+        if repeating {
             suffixes.reverse();
         }
 
