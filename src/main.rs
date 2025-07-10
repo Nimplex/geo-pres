@@ -1,13 +1,16 @@
 use crate::image_editor::process_assets;
 use crate::logger::{LogStyle, log_msg};
-use crate::parser::{parse_csv, Voivodeship};
+use crate::parser::{Voivodeship, parse_csv};
 use crate::paths::Paths;
+use crate::scraper::scrape;
 use std::error::Error;
 
 mod image_editor;
 mod logger;
 mod parser;
 mod paths;
+mod scraper;
+mod utils;
 
 fn display_table(dataset: &[Option<Voivodeship>]) {
     log!(
@@ -27,14 +30,13 @@ fn display_table(dataset: &[Option<Voivodeship>]) {
                 "TABLE",
                 "{:<24} {:<25} {:>15} {:>15}",
                 voivodeship.name,
-                city.city_name,
+                city.name,
                 city.total_population,
                 city.area_km
             );
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -46,6 +48,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let dataset = parse_csv(&paths.dataset)?;
 
     display_table(&dataset);
+
+    scrape(&paths, &dataset).await?;
 
     process_assets(&paths).await?;
 
