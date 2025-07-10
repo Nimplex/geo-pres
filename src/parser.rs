@@ -8,9 +8,9 @@ use std::path::Path;
 const VOIVODESHIP_COUNT: usize = 16;
 const DATA_COLUMNS: usize = 7;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct City {
-    pub voivode: String,
+    pub voivodeship: String,
     pub identifier: String,
     pub name: String,
     pub powiat: String,
@@ -26,7 +26,7 @@ impl TryFrom<[&str; DATA_COLUMNS]> for City {
 
     fn try_from(value: [&str; DATA_COLUMNS]) -> Result<Self, Self::Error> {
         Ok(Self {
-            voivode: "".into(),
+            voivodeship: "".into(),
             identifier: value[0].into(),
             name: value[1].into(),
             powiat: value[2].into(),
@@ -88,7 +88,7 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Option<Voivodeship>; VOIVODESH
             .try_into()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
 
-        city.voivode = dataset[current_voivodeship as usize]
+        city.voivodeship = dataset[current_voivodeship as usize]
             .as_ref()
             .unwrap()
             .name
