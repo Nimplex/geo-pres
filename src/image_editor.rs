@@ -1,13 +1,5 @@
 use crate::paths::Paths;
-use std::fs;
-use std::path::Path;
-
-fn ensure_exists(path: &Path) -> std::io::Result<()> {
-    if !path.exists() {
-        fs::create_dir_all(path)?;
-    }
-    Ok(())
-}
+use crate::utils::ensure_exists;
 
 pub async fn process_assets(paths: &Paths) -> std::io::Result<()> {
     ensure_exists(&paths.backgrounds)?;

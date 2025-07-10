@@ -10,13 +10,15 @@ const DATA_COLUMNS: usize = 7;
 
 #[derive(Debug)]
 pub struct City {
+    pub voivode: String,
     pub identifier: String,
-    pub city_name: String,
+    pub name: String,
     pub powiat: String,
     pub area_ha: u64,
     pub area_km: u64,
     pub total_population: u64,
     pub population_per_km: u64,
+    pub repeating: bool,
 }
 
 impl TryFrom<[&str; DATA_COLUMNS]> for City {
@@ -24,13 +26,15 @@ impl TryFrom<[&str; DATA_COLUMNS]> for City {
 
     fn try_from(value: [&str; DATA_COLUMNS]) -> Result<Self, Self::Error> {
         Ok(Self {
+            voivode: "".into(),
             identifier: value[0].into(),
-            city_name: value[1].into(),
+            name: value[1].into(),
             powiat: value[2].into(),
             area_ha: value[3].parse()?,
             area_km: value[4].parse()?,
             total_population: value[5].parse()?,
             population_per_km: value[6].parse()?,
+            repeating: false,
         })
     }
 }
@@ -57,9 +61,9 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Option<Voivodeship>; VOIVODESH
     );
 
     let name_re = Regex::new(r"(WOJ. [\w-]*)").unwrap();
-
     let mut dataset: [Option<Voivodeship>; VOIVODESHIP_COUNT] = Default::default();
     let mut current_voivodeship: i32 = -1;
+
     for line in data.lines() {
         let parts: [&str; DATA_COLUMNS] = line
             .split_terminator(',')
@@ -80,9 +84,15 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Option<Voivodeship>; VOIVODESH
             }
         }
 
-        let city: City = parts
+        let mut city: City = parts
             .try_into()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+
+        city.voivode = dataset[current_voivodeship as usize]
+            .as_ref()
+            .unwrap()
+            .name
+            .clone();
 
         let cell = &mut dataset[current_voivodeship as usize];
         cell.as_mut().unwrap().content.push(city);
