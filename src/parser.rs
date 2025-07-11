@@ -1,9 +1,9 @@
-use crate::log;
-use crate::logger::{LogStyle, log_msg};
-
+use crate::{
+    log,
+    logger::{LogStyle, log_msg},
+};
 use regex::Regex;
-use std::num::ParseIntError;
-use std::path::Path;
+use std::{num::ParseIntError, path::Path};
 
 pub const VOIVODESHIP_COUNT: usize = 16;
 const DATA_COLUMNS: usize = 7;
@@ -60,7 +60,7 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Voivodeship; VOIVODESHIP_COUNT
         "Parsing CSV dataset"
     );
 
-    let name_re = Regex::new(r"(WOJ. [\w-]*)").unwrap();
+    let name_re = Regex::new(r"WOJ. ([\w-]*)").unwrap();
     let mut dataset: [Option<Voivodeship>; VOIVODESHIP_COUNT] = Default::default();
     let mut current_voivodeship: i32 = -1;
 
@@ -83,7 +83,7 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Voivodeship; VOIVODESHIP_COUNT
             };
 
             dataset[current_voivodeship as usize] = Some(Voivodeship {
-                name: caps[1].into(),
+                name: caps[1].to_lowercase(),
                 content: vec![],
             });
             continue;

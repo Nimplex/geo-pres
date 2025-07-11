@@ -1,7 +1,7 @@
 use crate::{
     log,
     logger::{LogStyle, log_msg},
-    parser::{City, VOIVODESHIP_COUNT, Voivodeship},
+    parser::{VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
     utils::{ensure_exists, format_file_name},
 };
@@ -12,6 +12,9 @@ use std::{
     fs::{DirEntry, read_dir},
     path::Path,
 };
+use tokio::task::JoinSet;
+
+const CONCURRENT_DOWNLOADS: usize = 5;
 
 fn file_stem(entry: &DirEntry) -> Option<String> {
     Some(
@@ -23,14 +26,21 @@ fn file_stem(entry: &DirEntry) -> Option<String> {
     )
 }
 
-async fn try_page(city: &City, suffix: &str) -> Result<String, Error> {
-    let city_link = format!("{}{}", city.name, suffix).replace(" ", "_");
-    let url = format!("https://pl.wikipedia.org/wiki/{}", city_link);
+async fn try_page<const N: usize>(
+    city_name: String,
+    suffixes: [String; N],
+) -> Result<String, Error> {
+    // TODO: add logging, return actual results, skip if not found
+    for suffix in suffixes {
+        let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
+        let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
-    let response = reqwest::get(url).await?;
-    let text = response.text().await?;
+        let response = reqwest::get(url).await?;
+        let text = response.text().await?;
 
-    Ok(text)
+        return Ok(text);
+    }
+    todo!()
 }
 
 pub async fn scrape(
@@ -59,7 +69,7 @@ pub async fn scrape(
     let mut cities = Vec::new();
     for voivodeship in dataset.iter() {
         for city in voivodeship.content.iter() {
-            let filename = format_file_name(&city);
+            let filename = format_file_name(city);
             let has_bg = backgrounds_stems.contains(&filename);
             let has_coa = coa_stems.contains(&filename);
             if !(has_bg && has_coa) {
@@ -89,46 +99,52 @@ pub async fn scrape(
 
     let regexes_list = [
         [
-            Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#),
-            Regex::new(r#"<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#),
+            Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
+            Regex::new(r#"<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#).unwrap(),
         ],
         [
-            Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#),
-            Regex::new(r#".*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#),
+            Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
+            Regex::new(r#".*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#).unwrap(),
         ],
         [
-            Regex::new(r#"<img .*?src="(.+?COA.+?)".*?>"#),
-            Regex::new(r#"<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#),
+            Regex::new(r#"<img .*?src="(.+?COA.+?)".*?>"#).unwrap(),
+            Regex::new(r#"<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#).unwrap(),
         ],
     ];
 
-    for &city in &cities {
-        let repeating = repeating_names.contains(&*city.name);
-        if repeating {
-            log!(
-                [LogStyle::Cyan],
-                "REPEATING",
-                "Trying reversed suffixes for '{}'",
-                city.name
-            );
-        }
-
-        let mut suffixes = [
-            "",
-            "_(miasto)",
-            &format!("_(województwo_{})", city.voivodeship),
-            &format!("_(powiat_{})", city.powiat),
-        ];
-
-        if repeating {
-            suffixes.reverse();
-        }
-
-        for suffix in suffixes {
-            if let Ok(city_content) = try_page(city, suffix).await {
-                log!([LogStyle::Cyan], "CONTENT", "{}", city_content);
+    for chunk in cities.chunks(CONCURRENT_DOWNLOADS) {
+        let mut join_set = JoinSet::new();
+        for &city in chunk {
+            let repeating = repeating_names.contains(&*city.name);
+            if repeating {
+                log!(
+                    [LogStyle::Cyan],
+                    "REPEATING",
+                    "Trying reversed suffixes for '{}'",
+                    city.name
+                );
             }
+
+            let voivodeship_suffix = format!("_(województwo_{})", city.voivodeship);
+            let powiat_suffix = format!("_(powiat_{})", city.powiat);
+
+            let mut suffixes = [
+                "".into(),
+                "_(miasto)".into(),
+                voivodeship_suffix,
+                powiat_suffix,
+            ];
+
+            if repeating {
+                suffixes.reverse();
+            }
+
+            log!([LogStyle::Purple], "SCRAPER", "Trying `{}`", city.name);
+            join_set.spawn(try_page(city.name.clone(), suffixes));
         }
+
+        let res = join_set.join_all().await;
+        // println!("{:?}", res);
     }
 
     Ok(())
