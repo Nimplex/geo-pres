@@ -1,5 +1,4 @@
-use crate::paths::Paths;
-use crate::utils::ensure_exists;
+use crate::{paths::Paths, utils::ensure_exists};
 
 pub async fn process_assets(paths: &Paths) -> std::io::Result<()> {
     ensure_exists(&paths.backgrounds)?;
