@@ -36,6 +36,9 @@ async fn try_page<const N: usize>(
         let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
         let response = reqwest::get(url).await?;
+        if let Err(err) = response.error_for_status_ref() {
+            
+        }
         let text = response.text().await?;
 
         return Ok(text);
@@ -112,6 +115,8 @@ pub async fn scrape(
         ],
     ];
 
+    let client = reqwest::Client::new();
+
     for chunk in cities.chunks(CONCURRENT_DOWNLOADS) {
         let mut join_set = JoinSet::new();
         for &city in chunk {
@@ -120,7 +125,7 @@ pub async fn scrape(
                 log!(
                     [LogStyle::Cyan],
                     "REPEATING",
-                    "Trying reversed suffixes for '{}'",
+                    "Reversing suffixes for '{}'",
                     city.name
                 );
             }
