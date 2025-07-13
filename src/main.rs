@@ -3,9 +3,9 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{Voivodeship, parse_csv},
     paths::Paths,
-    scraper::scrape,
+    scraper::get_links,
+    utils::AppResult,
 };
-use std::error::Error;
 
 mod image_editor;
 mod logger;
@@ -14,13 +14,14 @@ mod paths;
 mod scraper;
 mod utils;
 
-fn display_table(dataset: &[Voivodeship]) {
+fn display_dataset(dataset: &[Voivodeship]) {
     log!(
         [LogStyle::Blue],
         "TABLE",
-        "{:<24} {:<25} {:>15} {:>15}",
+        "{:<24} {:<25} {:<25} {:>15} {:>15}",
         "Voivodeship",
         "City",
+        "Powiat",
         "Population",
         "Area (km²)"
     );
@@ -30,9 +31,10 @@ fn display_table(dataset: &[Voivodeship]) {
             log!(
                 [LogStyle::Blue],
                 "TABLE",
-                "{:<24} {:<25} {:>15} {:>15}",
+                "{:<24} {:<25} {:<25} {:>15} {:>15}",
                 voivodeship.name,
                 city.name,
+                city.powiat,
                 city.total_population,
                 city.area_km
             );
@@ -41,12 +43,12 @@ fn display_table(dataset: &[Voivodeship]) {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> AppResult<()> {
     let paths = Paths::new()?;
 
     let dataset = parse_csv(&paths.dataset)?;
-    display_table(&dataset);
-    scrape(&paths, dataset).await?;
+    display_dataset(&dataset);
+    let (scrape_time, links) = get_links(&paths, &dataset).await?;
 
     process_assets(&paths).await?;
 

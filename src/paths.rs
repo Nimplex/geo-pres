@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use crate::utils::{AppError, AppResult};
+use std::{io, path::PathBuf};
 
 pub struct Paths {
-    pub data_dir: PathBuf,
     pub dataset: PathBuf,
     pub coa: PathBuf,
     pub edited_coa: PathBuf,
@@ -10,7 +10,7 @@ pub struct Paths {
     pub slides: PathBuf,
 }
 
-pub fn workspace_root() -> std::io::Result<PathBuf> {
+pub fn workspace_root() -> AppResult<PathBuf> {
     let cwd = std::env::current_dir()?;
 
     for path in cwd.ancestors() {
@@ -21,18 +21,17 @@ pub fn workspace_root() -> std::io::Result<PathBuf> {
         }
     }
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
+    Err(AppError::Io(io::Error::new(
+        io::ErrorKind::NotFound,
         "couldn't find Cargo.lock in the working directory nor in it's parents",
-    ))
+    )))
 }
 
 impl Paths {
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new() -> AppResult<Self> {
         let base_dir = workspace_root()?;
         let data = base_dir.join("data");
         Ok(Self {
-            data_dir: data.clone(),
             dataset: data.join("dane.csv"),
             coa: data.join("coats-of-arms"),
             edited_coa: data.join("edited-coats-of-arms"),
