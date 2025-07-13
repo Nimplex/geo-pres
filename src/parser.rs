@@ -1,9 +1,10 @@
 use crate::{
     log,
     logger::{LogStyle, log_msg},
+    utils::{AppError, AppResult},
 };
 use regex::Regex;
-use std::{num::ParseIntError, path::Path};
+use std::{io, num::ParseIntError, path::Path};
 
 pub const VOIVODESHIP_COUNT: usize = 16;
 const DATA_COLUMNS: usize = 7;
@@ -29,7 +30,7 @@ impl TryFrom<([&str; DATA_COLUMNS], String)> for City {
         Ok(Self {
             identifier: data[0].into(),
             name: data[1].into(),
-            powiat: data[2].into(),
+            powiat: data[2].to_lowercase(),
             area_ha: data[3].parse()?,
             area_km: data[4].parse()?,
             total_population: data[5].parse()?,
@@ -44,7 +45,7 @@ pub struct Voivodeship {
     pub content: Vec<City>,
 }
 
-pub fn parse_csv(path: &Path) -> std::io::Result<[Voivodeship; VOIVODESHIP_COUNT]> {
+pub fn parse_csv(path: &Path) -> AppResult<[Voivodeship; VOIVODESHIP_COUNT]> {
     log!(
         [LogStyle::Blue, LogStyle::Bold],
         "PARSER",
@@ -76,10 +77,7 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Voivodeship; VOIVODESHIP_COUNT
         if parts[2].is_empty() && !parts[1].is_empty() {
             current_voivodeship += 1;
             let Some(caps) = name_re.captures(parts[1].trim()) else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "No voivodeship name found",
-                ));
+                return Err(AppError::Other("No voivodeship name found".into()));
             };
 
             dataset[current_voivodeship as usize] = Some(Voivodeship {
@@ -97,7 +95,7 @@ pub fn parse_csv(path: &Path) -> std::io::Result<[Voivodeship; VOIVODESHIP_COUNT
 
         let city: City = (parts, voivodeship_name)
             .try_into()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+            .map_err(|err| AppError::Io(io::Error::new(io::ErrorKind::InvalidData, err)))?;
 
         let cell = &mut dataset[current_voivodeship as usize];
         cell.as_mut().unwrap().content.push(city);
