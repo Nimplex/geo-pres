@@ -1,5 +1,6 @@
 #[derive(Clone, Copy)]
 pub enum LogStyle {
+    Clear = 0,
     Bold = 1,
     Italic = 3,
     Red = 31,
@@ -47,7 +48,7 @@ pub(crate) fn log_msg<const N: usize>(colors: [LogStyle; N], prefix: &str, messa
 
 #[macro_export]
 macro_rules! log {
-    ($colors:expr, $prefix:tt, $($arg:tt)*) => {
+    ($colors:expr, $prefix:expr, $($arg:tt)*) => {
         log_msg($colors, $prefix, format!("{}", format_args!($($arg)*)))
     };
 }
