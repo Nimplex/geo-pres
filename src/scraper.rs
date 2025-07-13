@@ -3,22 +3,28 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
-    utils::{ensure_exists, format_file_name},
+    utils::{AppResult, ensure_exists, format_file_name, format_file_name_parts},
 };
 use regex::Regex;
-use reqwest::Error;
 use std::{
     collections::{HashMap, HashSet},
     fs::{DirEntry, read_dir},
+    io,
     path::Path,
     sync::{
         Arc,
         atomic::{AtomicU32, Ordering},
     },
+    time,
 };
 use tokio::task::JoinSet;
 
 const CONCURRENT_DOWNLOADS: usize = 5;
+
+pub struct Links {
+    pub coa_link: String,
+    pub bg_link: String,
+}
 
 fn file_stem(entry: &DirEntry) -> Option<String> {
     Some(
@@ -30,76 +36,91 @@ fn file_stem(entry: &DirEntry) -> Option<String> {
     )
 }
 
+fn log_try_page(positive: bool, prefix: &str, reason: &str, city_link: String) {
+    let color = if positive {
+        LogStyle::Green
+    } else {
+        LogStyle::Yellow
+    };
+    log!(
+        [color],
+        prefix,
+        "{}{reason:20}{} {}{color}\u{2022}{} {}.../wiki/{city_link}{}",
+        LogStyle::Italic,
+        LogStyle::Clear,
+        LogStyle::Bold,
+        LogStyle::Clear,
+        LogStyle::Cyan,
+        LogStyle::Clear,
+    )
+}
+
 async fn try_page<const N: usize, const M: usize>(
     city_name: String,
+    city_identifier: String,
     suffixes: [String; N],
     regexes: Arc<[(Regex, Regex); M]>,
+    replacement_regex: Arc<Regex>,
     client: reqwest::Client,
     counter: Arc<AtomicU32>,
     total: usize,
-) -> Result<String, Error> {
+) -> Option<(String, Links)> {
     for (coa_regex, bg_regex) in regexes.iter() {
         for suffix in &suffixes {
             let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
             let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
-            let response = client.get(url).send().await?;
+            let response = client.get(url).send().await.ok()?;
 
             if let Err(error) = response.error_for_status_ref() {
-                log!(
-                    [LogStyle::Yellow],
+                log_try_page(
+                    false,
                     "FAIL",
-                    "{}{} {}{} @ {}.../wiki/{city_link}{}, trying next suffix...",
-                    LogStyle::Italic,
-                    error.status().unwrap().as_u16(),
-                    error.status().unwrap().canonical_reason().unwrap(),
-                    LogStyle::Clear,
-                    LogStyle::Cyan,
-                    LogStyle::Clear,
+                    &format!(
+                        "{} {}",
+                        error.status().unwrap().as_u16(),
+                        error.status().unwrap().canonical_reason().unwrap()
+                    ),
+                    city_link,
                 );
                 continue;
             }
 
-            let status = response.status();
-            let text = response.text().await?;
-
-            let Some(coa_link) = coa_regex.find(&text) else {
-                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+            let text = response.text().await.ok()?;
+            let Some(coa_captures) = coa_regex.captures(&text) else {
+                log_try_page(false, "NO MATCH", "no COA", city_link);
                 continue;
             };
 
-            let Some(bg_link) = bg_regex.find(&text) else {
-                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+            let Some(bg_captures) = bg_regex.captures(&text) else {
+                log_try_page(false, "NO MATCH", "no background", city_link);
                 continue;
             };
 
-            let coa_link = coa_link.as_str();
-            let bg_link = bg_link.as_str();
+            let bg_cap = bg_captures.get(1).unwrap().as_str().replace("/thumb", "");
+
+            let coa_link = "https:".to_owned() + coa_captures.get(1).unwrap().as_str();
+            let bg_link = "https:".to_owned() + &replacement_regex.replace(&bg_cap, "");
 
             if coa_link == bg_link {
                 log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
                 continue;
             };
 
-            // TODO: add "stripThumb", "cleanLinks" and other stuff
-
-            log!(
-                [LogStyle::Green],
+            log_try_page(
+                true,
                 &format!(
                     "HIT{:>12}",
-                    format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed))
+                    format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed) + 1)
                 ),
-                "{}{} {}{} @ {}.../wiki/{city_link}{}",
-                LogStyle::Italic,
-                status.as_u16(),
-                status.canonical_reason().unwrap(),
-                LogStyle::Clear,
-                LogStyle::Cyan,
-                LogStyle::Clear,
+                "COA OK, BG OK",
+                city_link,
             );
 
-            // mock skip, add actually returning an image
-            return Ok("a".into());
+            return Some((
+                format_file_name_parts(&city_identifier, &city_name),
+                Links { coa_link, bg_link },
+            ));
         }
     }
 
@@ -109,15 +130,17 @@ async fn try_page<const N: usize, const M: usize>(
         "No image found for city {city_name}.",
     );
 
-    return Ok("".into());
+    None
 }
 
-pub async fn scrape(
+pub async fn get_links(
     paths: &Paths,
-    dataset: [Voivodeship; VOIVODESHIP_COUNT],
-) -> std::io::Result<()> {
+    dataset: &[Voivodeship; VOIVODESHIP_COUNT],
+) -> AppResult<(time::Duration, Vec<(String, Links)>)> {
     ensure_exists(&paths.coa)?;
     ensure_exists(&paths.backgrounds)?;
+
+    let start_time = time::Instant::now();
 
     log!([LogStyle::Blue], "SCRAPER", "Checking for existing entries");
 
@@ -166,24 +189,29 @@ pub async fn scrape(
             .collect()
     };
 
+    let replacement_regex = Arc::new(Regex::new(r"/[^/]*?$").unwrap());
+
     let regexes_list = Arc::new([
         (
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
-            Regex::new(r#"<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#).unwrap(),
+            Regex::new(r#"(?s)<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#).unwrap(),
         ),
         (
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
-            Regex::new(r#".*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#).unwrap(),
+            Regex::new(r#"(?s).*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#)
+                .unwrap(),
         ),
         (
             Regex::new(r#"<img .*?src="(.+?COA.+?)".*?>"#).unwrap(),
-            Regex::new(r#"<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#).unwrap(),
+            Regex::new(r#"(?i)<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#).unwrap(),
         ),
     ]);
 
     let client = reqwest::Client::new();
     let download_counter = Arc::new(AtomicU32::new(0));
     let total_downloads = cities.len();
+
+    let mut links: Vec<Option<(String, Links)>> = vec![];
 
     for chunk in cities.chunks(CONCURRENT_DOWNLOADS) {
         let mut join_set = JoinSet::new();
@@ -214,17 +242,60 @@ pub async fn scrape(
 
             join_set.spawn(try_page(
                 city.name.clone(),
+                city.identifier.clone(),
                 suffixes,
                 regexes_list.clone(),
+                replacement_regex.clone(),
                 client.clone(),
                 download_counter.clone(),
                 total_downloads,
             ));
         }
 
-        let res = join_set.join_all().await;
-        // println!("{:?}", res);
+        let mut res = join_set.join_all().await;
+        links.append(&mut res);
     }
 
-    Ok(())
+    let collected_links: Vec<_> = links.into_iter().flatten().collect();
+    log!(
+        [LogStyle::Purple],
+        "SCRAPER DONE",
+        "Finished scraping in {:.4} s; {}{}{} OK, {}{}{} errors",
+        start_time.elapsed().as_secs_f32(),
+        LogStyle::Green,
+        collected_links.len(),
+        LogStyle::Clear,
+        LogStyle::Red,
+        total_downloads - collected_links.len(),
+        LogStyle::Clear,
+    );
+    Ok((start_time.elapsed(), collected_links))
+}
+
+async fn download_city_files(
+    data: Arc<(String, Links)>,
+    client: Arc<reqwest::Client>,
+) -> AppResult<()> {
+    let req = client.get(&data.1.coa_link);
+    req.send().await?;
+
+    todo!()
+}
+
+pub async fn download_assets(links: Vec<(String, Links)>) {
+    let start_time = time::Instant::now();
+    let client = Arc::new(reqwest::Client::new());
+
+    let links: Vec<Arc<(String, Links)>> = links.into_iter().map(|x| Arc::new(x)).collect();
+
+    for chunk in links.chunks(CONCURRENT_DOWNLOADS) {
+        let mut join_set: JoinSet<AppResult<()>> = JoinSet::new();
+
+        for data in chunk {
+            join_set.spawn(download_city_files(data.clone(), client.clone()));
+        }
+
+        let vec = join_set.join_all().await;
+    }
+    todo!()
 }
