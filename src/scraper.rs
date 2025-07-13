@@ -30,43 +30,25 @@ fn file_stem(entry: &DirEntry) -> Option<String> {
     )
 }
 
-async fn try_page<const N: usize>(
+async fn try_page<const N: usize, const M: usize>(
     city_name: String,
     suffixes: [String; N],
+    regexes: Arc<[(Regex, Regex); M]>,
     client: reqwest::Client,
     counter: Arc<AtomicU32>,
     total: usize,
 ) -> Result<String, Error> {
-    // TODO: add logging, return actual results, skip if not found
-    for suffix in suffixes {
-        let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
-        let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
+    for (coa_regex, bg_regex) in regexes.iter() {
+        for suffix in &suffixes {
+            let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
+            let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
-        let response = client.get(url).send().await?;
-        match response.error_for_status() {
-            Ok(res) => {
-                log!(
-                    [LogStyle::Green],
-                    &format!(
-                        "HIT{:>12}",
-                        format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed))
-                    ),
-                    "{}{} {}{} @ {}.../wiki/{city_link}{}",
-                    LogStyle::Italic,
-                    res.status().as_u16(),
-                    res.status().canonical_reason().unwrap(),
-                    LogStyle::Clear,
-                    LogStyle::Cyan,
-                    LogStyle::Clear,
-                );
+            let response = client.get(url).send().await?;
 
-                // mock skip, add actually returning an image
-                return Ok("a".into());
-            }
-            Err(error) => {
+            if let Err(error) = response.error_for_status_ref() {
                 log!(
                     [LogStyle::Yellow],
-                    "NO HIT",
+                    "FAIL",
                     "{}{} {}{} @ {}.../wiki/{city_link}{}, trying next suffix...",
                     LogStyle::Italic,
                     error.status().unwrap().as_u16(),
@@ -74,8 +56,50 @@ async fn try_page<const N: usize>(
                     LogStyle::Clear,
                     LogStyle::Cyan,
                     LogStyle::Clear,
-                )
+                );
+                continue;
             }
+
+            let status = response.status();
+            let text = response.text().await?;
+
+            let Some(coa_link) = coa_regex.find(&text) else {
+                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+                continue;
+            };
+
+            let Some(bg_link) = bg_regex.find(&text) else {
+                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+                continue;
+            };
+
+            let coa_link = coa_link.as_str();
+            let bg_link = bg_link.as_str();
+
+            if coa_link == bg_link {
+                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+                continue;
+            };
+
+            // TODO: add "stripThumb", "cleanLinks" and other stuff
+
+            log!(
+                [LogStyle::Green],
+                &format!(
+                    "HIT{:>12}",
+                    format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed))
+                ),
+                "{}{} {}{} @ {}.../wiki/{city_link}{}",
+                LogStyle::Italic,
+                status.as_u16(),
+                status.canonical_reason().unwrap(),
+                LogStyle::Clear,
+                LogStyle::Cyan,
+                LogStyle::Clear,
+            );
+
+            // mock skip, add actually returning an image
+            return Ok("a".into());
         }
     }
 
@@ -142,20 +166,20 @@ pub async fn scrape(
             .collect()
     };
 
-    let regexes_list = [
-        [
+    let regexes_list = Arc::new([
+        (
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
             Regex::new(r#"<tr class="grafika iboxs.*?<img .*?src="(.+?)".*?>"#).unwrap(),
-        ],
-        [
+        ),
+        (
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
             Regex::new(r#".*<figure .*?typeof="mw:File/Thumb".*?<img .*?src="(.+?)".*?>"#).unwrap(),
-        ],
-        [
+        ),
+        (
             Regex::new(r#"<img .*?src="(.+?COA.+?)".*?>"#).unwrap(),
             Regex::new(r#"<img .*?alt="Ilustracja" .*?src="(.+?)".*?>"#).unwrap(),
-        ],
-    ];
+        ),
+    ]);
 
     let client = reqwest::Client::new();
     let download_counter = Arc::new(AtomicU32::new(0));
@@ -191,6 +215,7 @@ pub async fn scrape(
             join_set.spawn(try_page(
                 city.name.clone(),
                 suffixes,
+                regexes_list.clone(),
                 client.clone(),
                 download_counter.clone(),
                 total_downloads,
