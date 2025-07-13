@@ -11,6 +11,10 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{DirEntry, read_dir},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
 };
 use tokio::task::JoinSet;
 
@@ -29,21 +33,59 @@ fn file_stem(entry: &DirEntry) -> Option<String> {
 async fn try_page<const N: usize>(
     city_name: String,
     suffixes: [String; N],
+    client: reqwest::Client,
+    counter: Arc<AtomicU32>,
+    total: usize,
 ) -> Result<String, Error> {
     // TODO: add logging, return actual results, skip if not found
     for suffix in suffixes {
         let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
         let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
-        let response = reqwest::get(url).await?;
-        if let Err(err) = response.error_for_status_ref() {
-            
-        }
-        let text = response.text().await?;
+        let response = client.get(url).send().await?;
+        match response.error_for_status() {
+            Ok(res) => {
+                log!(
+                    [LogStyle::Green],
+                    &format!(
+                        "HIT{:>12}",
+                        format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed))
+                    ),
+                    "{}{} {}{} @ {}.../wiki/{city_link}{}",
+                    LogStyle::Italic,
+                    res.status().as_u16(),
+                    res.status().canonical_reason().unwrap(),
+                    LogStyle::Clear,
+                    LogStyle::Cyan,
+                    LogStyle::Clear,
+                );
 
-        return Ok(text);
+                // mock skip, add actually returning an image
+                return Ok("a".into());
+            }
+            Err(error) => {
+                log!(
+                    [LogStyle::Yellow],
+                    "NO HIT",
+                    "{}{} {}{} @ {}.../wiki/{city_link}{}, trying next suffix...",
+                    LogStyle::Italic,
+                    error.status().unwrap().as_u16(),
+                    error.status().unwrap().canonical_reason().unwrap(),
+                    LogStyle::Clear,
+                    LogStyle::Cyan,
+                    LogStyle::Clear,
+                )
+            }
+        }
     }
-    todo!()
+
+    log!(
+        [LogStyle::Red],
+        "PARSER ERR",
+        "No image found for city {city_name}.",
+    );
+
+    return Ok("".into());
 }
 
 pub async fn scrape(
@@ -82,7 +124,7 @@ pub async fn scrape(
     }
 
     log!(
-        [LogStyle::Purple],
+        [LogStyle::Blue],
         "SCRAPER",
         "Found {} cities that need scraping",
         cities.len()
@@ -90,7 +132,7 @@ pub async fn scrape(
 
     let repeating_names: HashSet<&str> = {
         let mut name_counts: HashMap<&str, usize> = HashMap::new();
-        for city in &cities {
+        for &city in &cities {
             *name_counts.entry(&city.name).or_default() += 1;
         }
 
@@ -116,6 +158,8 @@ pub async fn scrape(
     ];
 
     let client = reqwest::Client::new();
+    let download_counter = Arc::new(AtomicU32::new(0));
+    let total_downloads = cities.len();
 
     for chunk in cities.chunks(CONCURRENT_DOWNLOADS) {
         let mut join_set = JoinSet::new();
@@ -123,7 +167,7 @@ pub async fn scrape(
             let repeating = repeating_names.contains(&*city.name);
             if repeating {
                 log!(
-                    [LogStyle::Cyan],
+                    [LogStyle::Blue],
                     "REPEATING",
                     "Reversing suffixes for '{}'",
                     city.name
@@ -144,8 +188,13 @@ pub async fn scrape(
                 suffixes.reverse();
             }
 
-            log!([LogStyle::Purple], "SCRAPER", "Trying `{}`", city.name);
-            join_set.spawn(try_page(city.name.clone(), suffixes));
+            join_set.spawn(try_page(
+                city.name.clone(),
+                suffixes,
+                client.clone(),
+                download_counter.clone(),
+                total_downloads,
+            ));
         }
 
         let res = join_set.join_all().await;
