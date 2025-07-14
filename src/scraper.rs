@@ -3,13 +3,12 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
-    utils::{AppResult, ensure_exists, format_file_name, format_file_name_parts},
+    utils::{AppError, AppResult, ensure_exists, format_file_name, format_file_name_parts},
 };
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
     fs::{DirEntry, read_dir},
-    io,
     path::Path,
     sync::{
         Arc,
@@ -17,9 +16,10 @@ use std::{
     },
     time,
 };
-use tokio::task::JoinSet;
+use tokio::{join, task::JoinSet};
 
 const CONCURRENT_DOWNLOADS: usize = 5;
+const USER_AGENT: &str = "radio/video";
 
 pub struct Links {
     pub coa_link: String,
@@ -70,7 +70,12 @@ async fn try_page<const N: usize, const M: usize>(
             let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
             let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
-            let response = client.get(url).send().await.ok()?;
+            let response = client
+                .get(url)
+                .send()
+                .await
+                .inspect_err(|err| log!([LogStyle::Bold, LogStyle::Red], "CRITICAL ERROR", "{err}"))
+                .ok()?;
 
             if let Err(error) = response.error_for_status_ref() {
                 log_try_page(
@@ -86,7 +91,12 @@ async fn try_page<const N: usize, const M: usize>(
                 continue;
             }
 
-            let text = response.text().await.ok()?;
+            let text = response
+                .text()
+                .await
+                .inspect_err(|err| log!([LogStyle::Bold, LogStyle::Red], "CRITICAL ERROR", "{err}"))
+                .ok()?;
+
             let Some(coa_captures) = coa_regex.captures(&text) else {
                 log_try_page(false, "NO MATCH", "no COA", city_link);
                 continue;
@@ -103,7 +113,7 @@ async fn try_page<const N: usize, const M: usize>(
             let bg_link = "https:".to_owned() + &replacement_regex.replace(&bg_cap, "");
 
             if coa_link == bg_link {
-                log!([LogStyle::Yellow], "NO MATCH", ".../wiki/{city_link}",);
+                log_try_page(false, "NO MATCH", "images repeat", city_link);
                 continue;
             };
 
@@ -137,10 +147,10 @@ pub async fn get_links(
     paths: &Paths,
     dataset: &[Voivodeship; VOIVODESHIP_COUNT],
 ) -> AppResult<(time::Duration, Vec<(String, Links)>)> {
+    let start_time = time::Instant::now();
+
     ensure_exists(&paths.coa)?;
     ensure_exists(&paths.backgrounds)?;
-
-    let start_time = time::Instant::now();
 
     log!([LogStyle::Blue], "SCRAPER", "Checking for existing entries");
 
@@ -207,7 +217,7 @@ pub async fn get_links(
         ),
     ]);
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
     let download_counter = Arc::new(AtomicU32::new(0));
     let total_downloads = cities.len();
 
@@ -272,30 +282,140 @@ pub async fn get_links(
     Ok((start_time.elapsed(), collected_links))
 }
 
-async fn download_city_files(
-    data: Arc<(String, Links)>,
+async fn download_image(
     client: Arc<reqwest::Client>,
+    link: &str,
+    file_name: &str,
+    folder: &Path,
+    counter: Arc<AtomicU32>,
+    total: usize,
 ) -> AppResult<()> {
-    let req = client.get(&data.1.coa_link);
-    req.send().await?;
+    let default_type = &reqwest::header::HeaderValue::from_static("image/raw");
+    let res = client
+        .get(link)
+        .send()
+        .await
+        .inspect_err(|err| log!([LogStyle::Bold, LogStyle::Red], "CRITICAL ERROR", "{err}"))?;
 
-    todo!()
+    if let Err(err) = res.error_for_status_ref() {
+        log!(
+            [LogStyle::Red],
+            "ERR",
+            "Couldn't download COA for {}: Server returned {}{} {}{}",
+            file_name,
+            LogStyle::Italic,
+            err.status().unwrap().as_u16(),
+            err.status().unwrap().canonical_reason().unwrap(),
+            LogStyle::Clear,
+        );
+
+        return Err(err.into());
+    }
+
+    let extension = res
+        .headers()
+        .get("Content-Type")
+        .unwrap_or(default_type)
+        .to_str()
+        .map_err(|_| AppError::Other("request conversion error".into()))
+        .inspect_err(|err| log!([LogStyle::Bold, LogStyle::Red], "CRITICAL ERROR", "{err}"))?
+        .trim_start_matches("image/")
+        .trim_end_matches("+xml");
+
+    let file_path = folder.join(format!("{}.{}", file_name, extension));
+    let bytes = res.bytes().await.inspect_err(|err| {
+        log!(
+            [LogStyle::Red],
+            "ERR",
+            "Couldn't fetch bytes from the server"
+        )
+    })?;
+
+    log!(
+        [LogStyle::Green],
+        &format!(
+            "OK{:>13}",
+            format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed) + 1)
+        ),
+        "Downloaded! Saving to {}{:?}{}",
+        LogStyle::Cyan,
+        file_path,
+        LogStyle::Clear
+    );
+
+    std::fs::write(file_path, bytes).inspect_err(|err| {
+        log!(
+            [LogStyle::Bold, LogStyle::Red],
+            "CRITICAL ERROR",
+            "Failed to write: {err}"
+        )
+    })?;
+
+    Ok(())
 }
 
-pub async fn download_assets(links: Vec<(String, Links)>) {
+pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<()> {
     let start_time = time::Instant::now();
-    let client = Arc::new(reqwest::Client::new());
 
+    ensure_exists(&paths.coa)?;
+    ensure_exists(&paths.backgrounds)?;
+
+    let client = Arc::new(reqwest::Client::builder().user_agent(USER_AGENT).build()?);
+    let counter = Arc::new(AtomicU32::new(0));
+    let paths = Arc::new(paths);
     let links: Vec<Arc<(String, Links)>> = links.into_iter().map(|x| Arc::new(x)).collect();
+    let total_to_download = links.len() * 2;
+    let mut total_downloaded = vec![];
 
     for chunk in links.chunks(CONCURRENT_DOWNLOADS) {
         let mut join_set: JoinSet<AppResult<()>> = JoinSet::new();
 
         for data in chunk {
-            join_set.spawn(download_city_files(data.clone(), client.clone()));
+            let data = data.clone();
+            let client = client.clone();
+            let paths = paths.clone();
+            let counter = counter.clone();
+
+            join_set.spawn(async move {
+                download_image(
+                    client.clone(),
+                    &data.1.coa_link,
+                    &data.0,
+                    &paths.coa,
+                    counter.clone(),
+                    total_to_download,
+                )
+                .await?;
+                download_image(
+                    client,
+                    &data.1.bg_link,
+                    &data.0,
+                    &paths.backgrounds,
+                    counter,
+                    total_to_download,
+                )
+                .await?;
+
+                Ok(())
+            });
         }
 
-        let vec = join_set.join_all().await;
+        let mut vec = join_set.join_all().await;
+        total_downloaded.append(&mut vec);
     }
-    todo!()
+    let total_downloaded = total_downloaded.into_iter().filter(|x| x.is_ok()).count() * 2;
+
+    log!(
+        [LogStyle::Purple],
+        "DOWNLOADS DONE",
+        "Finished downloading files in {:.4} s; {}{}{} OK, {}{}{} errors",
+        start_time.elapsed().as_secs_f32(),
+        LogStyle::Green,
+        total_downloaded,
+        LogStyle::Clear,
+        LogStyle::Red,
+        total_to_download - total_downloaded,
+        LogStyle::Clear,
+    );
+    Ok(())
 }
