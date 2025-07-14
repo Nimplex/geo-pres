@@ -50,9 +50,8 @@ async fn main() -> AppResult<()> {
     display_dataset(&dataset);
 
     let (scrape_time, links) = get_links(&paths, &dataset).await?;
-    download_assets(links, paths.clone()).await?;
-
-    process_assets(&paths, &dataset).await?;
+    let download_time = download_assets(links, paths.clone()).await?;
+    let (background_time, coa_time) = process_assets(&paths, &dataset).await?;
 
     Ok(())
 }

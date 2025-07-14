@@ -4,8 +4,8 @@ use std::{io, path::PathBuf};
 #[derive(Clone)]
 pub struct Paths {
     pub dataset: PathBuf,
-    pub coa: PathBuf,
-    pub edited_coa: PathBuf,
+    pub coas: PathBuf,
+    pub edited_coas: PathBuf,
     pub backgrounds: PathBuf,
     pub edited_backgrounds: PathBuf,
     pub slides: PathBuf,
@@ -34,8 +34,8 @@ impl Paths {
         let data = base_dir.join("data");
         Ok(Self {
             dataset: data.join("dane.csv"),
-            coa: data.join("coats-of-arms"),
-            edited_coa: data.join("edited-coats-of-arms"),
+            coas: data.join("coats-of-arms"),
+            edited_coas: data.join("edited-coats-of-arms"),
             backgrounds: data.join("backgrounds"),
             edited_backgrounds: data.join("edited-backgrounds"),
             slides: data.join("slides"),
