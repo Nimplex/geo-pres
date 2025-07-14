@@ -1,5 +1,5 @@
 use crate::parser::City;
-use std::{fs, io, path::Path};
+use std::{fs::{self, DirEntry}, io, path::Path};
 
 pub type AppResult<T> = Result<T, AppError>;
 
@@ -47,18 +47,24 @@ pub fn ensure_exists(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-pub fn format_file_name(city: &City) -> String {
-    format!(
-        "{}+{}",
-        city.identifier.replace(' ', "_"),
-        city.name.replace(' ', "_")
-    )
-}
-
 pub fn format_file_name_parts(city_identifier: &str, city_name: &str) -> String {
     format!(
         "{}+{}",
         city_identifier.replace(' ', "_"),
         city_name.replace(' ', "_")
+    )
+}
+
+pub fn format_file_name(city: &City) -> String {
+    format_file_name_parts(&city.identifier, &city.name)
+}
+
+pub fn file_stem(entry: &DirEntry) -> Option<String> {
+    Some(
+        Path::new(&entry.file_name())
+            .file_stem()
+            .unwrap()
+            .to_str()?
+            .to_owned(),
     )
 }

@@ -48,10 +48,11 @@ async fn main() -> AppResult<()> {
 
     let dataset = parse_csv(&paths.dataset)?;
     display_dataset(&dataset);
-    let (scrape_time, links) = get_links(&paths, &dataset).await?;
 
+    let (scrape_time, links) = get_links(&paths, &dataset).await?;
     download_assets(links, paths.clone()).await?;
-    process_assets(&paths).await?;
+
+    process_assets(&paths, &dataset).await?;
 
     Ok(())
 }

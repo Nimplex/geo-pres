@@ -3,12 +3,14 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
-    utils::{AppError, AppResult, ensure_exists, format_file_name, format_file_name_parts},
+    utils::{
+        AppError, AppResult, ensure_exists, file_stem, format_file_name, format_file_name_parts,
+    },
 };
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
-    fs::{DirEntry, read_dir},
+    fs::read_dir,
     path::Path,
     sync::{
         Arc,
@@ -24,16 +26,6 @@ const USER_AGENT: &str = "radio/video";
 pub struct Links {
     pub coa_link: String,
     pub bg_link: String,
-}
-
-fn file_stem(entry: &DirEntry) -> Option<String> {
-    Some(
-        Path::new(&entry.file_name())
-            .file_stem()
-            .unwrap()
-            .to_str()?
-            .to_owned(),
-    )
 }
 
 fn log_try_page(positive: bool, prefix: &str, reason: &str, city_link: String) {
