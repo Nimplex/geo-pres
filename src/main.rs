@@ -3,7 +3,7 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{Voivodeship, parse_csv},
     paths::Paths,
-    scraper::get_links,
+    scraper::{download_assets, get_links},
     utils::AppResult,
 };
 
@@ -50,6 +50,7 @@ async fn main() -> AppResult<()> {
     display_dataset(&dataset);
     let (scrape_time, links) = get_links(&paths, &dataset).await?;
 
+    download_assets(links, paths.clone()).await;
     process_assets(&paths).await?;
 
     Ok(())
