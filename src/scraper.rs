@@ -109,15 +109,17 @@ async fn try_page<const N: usize, const M: usize>(
                 continue;
             };
 
-            let bg_cap = bg_captures.get(1).unwrap().as_str().replace("/thumb", "");
+            let bg_cap = bg_captures.get(1).unwrap().as_str();
+            let coa_cap = coa_captures.get(1).unwrap().as_str();
 
-            let coa_link = "https:".to_owned() + coa_captures.get(1).unwrap().as_str();
-            let bg_link = "https:".to_owned() + &replacement_regex.replace(&bg_cap, "");
-
-            if coa_link == bg_link {
+            if coa_cap == bg_cap {
                 log_try_page(false, "NO MATCH", "images repeat", city_link);
                 continue;
             };
+
+            let coa_link = String::from("https:") + coa_cap;
+            let bg_link = String::from("https:")
+                + &replacement_regex.replace(&bg_cap.replace("/thumb", ""), "");
 
             log_try_page(
                 true,
