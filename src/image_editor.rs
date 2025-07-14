@@ -2,6 +2,7 @@ use image::{DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Rgba, imag
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg::{Options, Tree};
 use std::path::Path;
+use std::time;
 use std::{
     collections::{HashMap, HashSet},
     fs::{read_dir, read_to_string, write},
@@ -31,7 +32,7 @@ fn svg_to_png(svg_data: &str) -> AppResult<Vec<u8>> {
     Ok(pixmap.encode_png().unwrap())
 }
 
-pub fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
+fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
     let blur_sigma = 3.5;
     let brightness = -35;
     let city_width = 1920;
@@ -76,7 +77,9 @@ pub fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-async fn process_backgrounds(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> {
+fn process_backgrounds(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<time::Duration> {
+    let start_time = time::Instant::now();
+
     let mut stem_to_filename: HashMap<String, String> = HashMap::new();
     for entry in read_dir(&paths.backgrounds)? {
         let entry = entry?;
@@ -156,16 +159,119 @@ async fn process_backgrounds(paths: &Paths, dataset: &[Voivodeship]) -> AppResul
         }
     }
 
+    Ok(start_time.elapsed())
+}
+
+fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
+    let target_width = 120;
+    let target_height = 150;
+
+    let mut image = image::open(input_path).unwrap();
+
+    image = image.resize_exact(
+        target_width,
+        target_height,
+        image::imageops::FilterType::Lanczos3,
+    );
+
+    image.save_with_format(output_path, ImageFormat::WebP).unwrap();
+
     Ok(())
 }
 
-pub async fn process_assets(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> {
+fn process_coa(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<time::Duration> {
+    let start_time = time::Instant::now();
+
+    let mut stem_to_filename: HashMap<String, String> = HashMap::new();
+    for entry in read_dir(&paths.coas)? {
+        let entry = entry?;
+        let path = entry.path();
+        if let (Some(stem), Some(ext)) = (file_stem(&entry), path.extension()) {
+            stem_to_filename.insert(stem, ext.to_str().unwrap().to_owned());
+        }
+    }
+
+    let mut edited_coas_stems = HashSet::new();
+    for entry in read_dir(&paths.edited_coas)? {
+        if let Some(stem) = file_stem(&entry?) {
+            edited_coas_stems.insert(stem);
+        }
+    }
+
+    let mut coas_paths = Vec::new();
+    for voivodeship in dataset.iter() {
+        for city in voivodeship.content.iter() {
+            let stem = format_file_name(city);
+            let has_bg = edited_coas_stems.contains(&stem);
+
+            if !has_bg && let Some(ext) = stem_to_filename.get(&stem) {
+                let full_filename = format!("{stem}.{ext}");
+                let file_path = paths.coas.join(full_filename);
+                coas_paths.push(file_path);
+            }
+        }
+    }
+
+    log!(
+        [LogStyle::Blue],
+        "IMAGE_EDITOR",
+        "Found {} COAs that need processing",
+        coas_paths.len()
+    );
+
+    for file_path in coas_paths.iter_mut() {
+        if file_path.extension().unwrap().to_owned() == "svg" {
+            let file_stem = file_path.file_stem().unwrap().to_str().unwrap().to_owned();
+            let svg_data = read_to_string(file_path.clone()).unwrap();
+            let png_data = svg_to_png(&svg_data).unwrap();
+            let file_name = format!("{}.png", file_stem);
+            let new_path = paths.coas.join(file_name);
+
+            log!(
+                [LogStyle::Blue],
+                "SVG",
+                "Detected SVG file, converting to PNG: {}",
+                new_path.to_str().to_owned().unwrap()
+            );
+
+            write(&new_path, png_data).unwrap();
+
+            *file_path = new_path;
+        }
+    }
+
+    for file_path in coas_paths {
+        let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
+        let output_path = paths.edited_coas.join(format!("{}.webp", file_stem));
+
+        match edit_coa(&file_path, &output_path) {
+            Ok(()) => log!(
+                [LogStyle::Green],
+                "IMAGE_EDITOR",
+                "Successfully processed: {}",
+                file_stem
+            ),
+            Err(e) => log!(
+                [LogStyle::Red],
+                "IMAGE_EDITOR",
+                "Failed to process {}: {}",
+                file_stem,
+                e
+            ),
+        }
+    }
+
+    Ok(start_time.elapsed())
+}
+
+pub async fn process_assets(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<(time::Duration, time::Duration)> {
     ensure_exists(&paths.backgrounds)?;
     ensure_exists(&paths.edited_backgrounds)?;
-    ensure_exists(&paths.coa)?;
-    ensure_exists(&paths.edited_coa)?;
+    ensure_exists(&paths.coas)?;
+    ensure_exists(&paths.edited_coas)?;
 
-    process_backgrounds(paths, dataset).await?;
+    let background_time = process_backgrounds(paths, dataset).unwrap();
+    let coa_time = process_coa(paths, dataset).unwrap();
 
-    Ok(())
+    Ok((background_time, coa_time))
 }

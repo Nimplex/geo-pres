@@ -145,7 +145,7 @@ pub async fn get_links(
 ) -> AppResult<(time::Duration, Vec<(String, Links)>)> {
     let start_time = time::Instant::now();
 
-    ensure_exists(&paths.coa)?;
+    ensure_exists(&paths.coas)?;
     ensure_exists(&paths.backgrounds)?;
 
     log!([LogStyle::Blue], "SCRAPER", "Checking for existing entries");
@@ -158,7 +158,7 @@ pub async fn get_links(
     }
 
     let mut coa_stems = HashSet::new();
-    for entry in read_dir(&paths.coa)? {
+    for entry in read_dir(&paths.coas)? {
         if let Some(stem) = file_stem(&entry?) {
             coa_stems.insert(stem);
         }
@@ -349,10 +349,10 @@ async fn download_image(
     Ok(())
 }
 
-pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<()> {
+pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<time::Duration> {
     let start_time = time::Instant::now();
 
-    ensure_exists(&paths.coa)?;
+    ensure_exists(&paths.coas)?;
     ensure_exists(&paths.backgrounds)?;
 
     let client = Arc::new(reqwest::Client::builder().user_agent(USER_AGENT).build()?);
@@ -376,7 +376,7 @@ pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppRe
                     client.clone(),
                     &data.1.coa_link,
                     &data.0,
-                    &paths.coa,
+                    &paths.coas,
                     counter.clone(),
                     total_to_download,
                 )
@@ -412,5 +412,5 @@ pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppRe
         total_to_download - total_downloaded,
         LogStyle::Clear,
     );
-    Ok(())
+    Ok(start_time.elapsed())
 }
