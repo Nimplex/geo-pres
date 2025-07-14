@@ -16,9 +16,9 @@ use std::{
     },
     time,
 };
-use tokio::{join, task::JoinSet};
+use tokio::task::JoinSet;
 
-const CONCURRENT_DOWNLOADS: usize = 5;
+const CONCURRENT_DOWNLOADS: usize = 10;
 const USER_AGENT: &str = "radio/video";
 
 pub struct Links {
@@ -56,8 +56,7 @@ fn log_try_page(positive: bool, prefix: &str, reason: &str, city_link: String) {
 }
 
 async fn try_page<const N: usize, const M: usize>(
-    city_name: String,
-    city_identifier: String,
+    city_data: (String, String),
     suffixes: [String; N],
     regexes: Arc<[(Regex, Regex); M]>,
     replacement_regex: Arc<Regex>,
@@ -65,9 +64,12 @@ async fn try_page<const N: usize, const M: usize>(
     counter: Arc<AtomicU32>,
     total: usize,
 ) -> Option<(String, Links)> {
+    let city_name = city_data.0;
+    let city_identifier = city_data.1;
+
     for (coa_regex, bg_regex) in regexes.iter() {
         for suffix in &suffixes {
-            let city_link = format!("{}{}", city_name, suffix).replace(" ", "_");
+            let city_link = format!("{city_name}{suffix}").replace(' ', "_");
             let url = format!("https://pl.wikipedia.org/wiki/{city_link}");
 
             let response = client
@@ -251,8 +253,7 @@ pub async fn get_links(
             }
 
             join_set.spawn(try_page(
-                city.name.clone(),
-                city.identifier.clone(),
+                (city.name.clone(), city.identifier.clone()),
                 suffixes,
                 regexes_list.clone(),
                 replacement_regex.clone(),
@@ -322,12 +323,12 @@ async fn download_image(
         .trim_start_matches("image/")
         .trim_end_matches("+xml");
 
-    let file_path = folder.join(format!("{}.{}", file_name, extension));
+    let file_path = folder.join(format!("{file_name}.{extension}"));
     let bytes = res.bytes().await.inspect_err(|err| {
         log!(
             [LogStyle::Red],
             "ERR",
-            "Couldn't fetch bytes from the server"
+            "Couldn't fetch bytes from the server: {err}"
         )
     })?;
 
@@ -363,7 +364,7 @@ pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppRe
     let client = Arc::new(reqwest::Client::builder().user_agent(USER_AGENT).build()?);
     let counter = Arc::new(AtomicU32::new(0));
     let paths = Arc::new(paths);
-    let links: Vec<Arc<(String, Links)>> = links.into_iter().map(|x| Arc::new(x)).collect();
+    let links: Vec<Arc<(String, Links)>> = links.into_iter().map(Arc::new).collect();
     let total_to_download = links.len() * 2;
     let mut total_downloaded = vec![];
 

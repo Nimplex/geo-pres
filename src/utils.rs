@@ -32,7 +32,11 @@ impl From<String> for AppError {
 impl std::error::Error for AppError {}
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        match self {
+            AppError::Io(error) => write!(f, "{error}"),
+            AppError::Request(error) => write!(f, "{error}"),
+            AppError::Other(error) => write!(f, "{error}"),
+        }
     }
 }
 
@@ -44,9 +48,17 @@ pub fn ensure_exists(path: &Path) -> AppResult<()> {
 }
 
 pub fn format_file_name(city: &City) -> String {
-    format!("{}+{}", city.identifier.replace(' ', "_"), city.name.replace(' ', "_"))
+    format!(
+        "{}+{}",
+        city.identifier.replace(' ', "_"),
+        city.name.replace(' ', "_")
+    )
 }
 
 pub fn format_file_name_parts(city_identifier: &str, city_name: &str) -> String {
-    format!("{}+{}", city_identifier.replace(' ', "_"), city_name.replace(' ', "_"))
+    format!(
+        "{}+{}",
+        city_identifier.replace(' ', "_"),
+        city_name.replace(' ', "_")
+    )
 }
