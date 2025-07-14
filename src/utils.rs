@@ -44,9 +44,9 @@ pub fn ensure_exists(path: &Path) -> AppResult<()> {
 }
 
 pub fn format_file_name(city: &City) -> String {
-    format!("{}+{}", city.identifier, city.name.replace(" ", "_"))
+    format!("{}+{}", city.identifier.replace(' ', "_"), city.name.replace(' ', "_"))
 }
 
 pub fn format_file_name_parts(city_identifier: &str, city_name: &str) -> String {
-    format!("{}+{}", city_identifier, city_name.replace(" ", "_"))
+    format!("{}+{}", city_identifier.replace(' ', "_"), city_name.replace(' ', "_"))
 }

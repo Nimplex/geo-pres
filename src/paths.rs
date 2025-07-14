@@ -1,6 +1,7 @@
 use crate::utils::{AppError, AppResult};
 use std::{io, path::PathBuf};
 
+#[derive(Clone)]
 pub struct Paths {
     pub dataset: PathBuf,
     pub coa: PathBuf,
