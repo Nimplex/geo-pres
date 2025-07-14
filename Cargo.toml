@@ -7,4 +7,5 @@ edition = "2024"
 image = { version = "0.25.6", features = ["png", "jpeg", "webp"] }
 regex = "1.11.1"
 reqwest = "0.12.22"
+resvg = { version = "0.45.1", features = ["image-webp", "text", "system-fonts"] }
 tokio = { version = "1.46.1", features = ["full"] }
