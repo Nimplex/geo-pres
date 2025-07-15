@@ -1,42 +1,74 @@
-use crate::parser::City;
-use std::{fs::{self, DirEntry}, io, path::Path};
+use crate::{logger::LogStyle, parser::City};
+use std::{fs, io, path::Path};
+
+macro_rules! join_error {
+    ($visibility: vis enum $name: ident { $($memb: ident($err: ty)),* $(,)?}) => {
+        #[derive(Debug)]
+        #[allow(dead_code)]
+        $visibility enum $name {
+            $($memb($err)),*
+        }
+
+        $(
+            impl From<$err> for $name {
+                fn from(value: $err) -> $name {
+                    $name::$memb(value)
+                }
+            }
+        )*
+
+        impl std::error::Error for $name {}
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(
+                        $name::$memb(error) => write!(f, "{error}"),
+                    )*
+                }
+            }
+        }
+    }
+}
+
+join_error! {
+    pub enum AppError {
+        UsvgError(resvg::usvg::Error),
+        ImageError(image::error::ImageError),
+        Io(io::Error),
+        Request(reqwest::Error),
+        Other(String),
+    }
+}
 
 pub type AppResult<T> = Result<T, AppError>;
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub enum AppError {
-    Io(io::Error),
-    Request(reqwest::Error),
-    Other(String),
+pub struct ReturnReport {
+    pub job_name: String,
+    pub duration: std::time::Duration,
+    pub amount_ok: usize,
+    pub amount_err: usize,
 }
 
-impl From<io::Error> for AppError {
-    fn from(value: io::Error) -> Self {
-        AppError::Io(value)
-    }
-}
-
-impl From<reqwest::Error> for AppError {
-    fn from(value: reqwest::Error) -> Self {
-        AppError::Request(value)
-    }
-}
-
-impl From<String> for AppError {
-    fn from(value: String) -> Self {
-        AppError::Other(value)
-    }
-}
-
-impl std::error::Error for AppError {}
-impl std::fmt::Display for AppError {
+impl std::fmt::Display for ReturnReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppError::Io(error) => write!(f, "{error}"),
-            AppError::Request(error) => write!(f, "{error}"),
-            AppError::Other(error) => write!(f, "{error}"),
-        }
+        write!(
+            f,
+            "{}{}{:18}{} => {}{:11.4}{} s, {}{:4}{} OK, {}{:4}{} error{}",
+            LogStyle::Purple,
+            LogStyle::Bold,
+            self.job_name,
+            LogStyle::Clear,
+            LogStyle::Cyan,
+            self.duration.as_secs_f32(),
+            LogStyle::Clear,
+            LogStyle::Green,
+            self.amount_ok,
+            LogStyle::Clear,
+            LogStyle::Red,
+            self.amount_err,
+            LogStyle::Clear,
+            if self.amount_err == 1 { "" } else { "s" }
+        )
     }
 }
 
@@ -59,12 +91,6 @@ pub fn format_file_name(city: &City) -> String {
     format_file_name_parts(&city.identifier, &city.name)
 }
 
-pub fn file_stem(entry: &DirEntry) -> Option<String> {
-    Some(
-        Path::new(&entry.file_name())
-            .file_stem()
-            .unwrap()
-            .to_str()?
-            .to_owned(),
-    )
+pub fn file_stem(path: &std::path::PathBuf) -> Option<String> {
+    Some(path.file_stem().unwrap().to_str()?.to_owned())
 }
