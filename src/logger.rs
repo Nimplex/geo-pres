@@ -26,23 +26,21 @@ impl From<LogStyle> for String {
 
 pub(crate) fn log_msg<const N: usize>(colors: [LogStyle; N], prefix: &str, message: String) {
     let lines: Vec<_> = message.lines().collect();
-    if let Some((&first, rest)) = lines.split_first() {
-        println!(
-            "[{}{prefix:15}{}] {first}",
-            colors
-                .iter()
-                .map(|x| Into::<String>::into(*x))
-                .collect::<String>(),
-            LogStyle::Clear,
-        );
+    let Some((&first, rest)) = lines.split_first() else {
+        return;
+    };
 
-        for &line in rest {
-            println!(
-                "{}---------------->{} {line}",
-                LogStyle::Grey,
-                LogStyle::Clear
-            );
-        }
+    println!(
+        "[{}{prefix:15}{}] {first}",
+        colors
+            .iter()
+            .map(|x| Into::<String>::into(*x))
+            .collect::<String>(),
+        LogStyle::Clear,
+    );
+
+    for &line in rest {
+        println!("................. {line}",);
     }
 }
 
