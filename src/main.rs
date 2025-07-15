@@ -49,9 +49,20 @@ async fn main() -> AppResult<()> {
     let dataset = parse_csv(&paths.dataset)?;
     display_dataset(&dataset);
 
-    let (scrape_time, links) = get_links(&paths, &dataset).await?;
-    let download_time = download_assets(links, paths.clone()).await?;
-    let (background_time, coa_time) = process_assets(&paths, &dataset).await?;
+    let (scraper_report, links) = get_links(&paths, &dataset).await?;
+    log!([LogStyle::Purple], "JOB DONE", "{}", scraper_report);
+    
+    let downloader_report = download_assets(links, paths.clone()).await?;
+    log!([LogStyle::Purple], "JOB DONE", "{}", downloader_report);
+
+    let (background_edit_report, coa_edit_report) = process_assets(&paths, &dataset).await?;
+
+    log!(
+        [LogStyle::Purple, LogStyle::Bold],
+        "FINISHED",
+        "Finished processing. Stats:\n{}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}",
+        "=".repeat(60),
+    );
 
     Ok(())
 }

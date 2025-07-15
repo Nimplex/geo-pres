@@ -1,237 +1,229 @@
-use image::{DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Rgba, imageops};
-use resvg::tiny_skia::{Pixmap, Transform};
-use resvg::usvg::{Options, Tree};
-use std::path::Path;
-use std::time;
-use std::{
-    collections::{HashMap, HashSet},
-    fs::{read_dir, read_to_string, write},
-};
-
 use crate::{
     log,
     logger::{LogStyle, log_msg},
     parser::Voivodeship,
     paths::Paths,
-    utils::{AppResult, ensure_exists, file_stem, format_file_name},
+    utils::{AppError, AppResult, ReturnReport, ensure_exists, file_stem, format_file_name},
 };
+use image::{DynamicImage, GenericImageView, ImageBuffer, ImageFormat, Rgba, imageops};
+use resvg::{
+    tiny_skia::{Pixmap, Transform},
+    usvg::{Options, Tree},
+};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{read_dir, read_to_string, write},
+    path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+    time,
+};
+use tokio::task::JoinSet;
+
+const CONCURRENT_JOBS: usize = 32;
 
 fn svg_to_png(svg_data: &str) -> AppResult<Vec<u8>> {
-    let tree = Tree::from_str(svg_data, &Options::default()).unwrap();
+    let tree = Tree::from_str(svg_data, &Options::default())?;
 
     let size = tree.size();
     let width = size.width() as u32;
     let height = size.height() as u32;
 
-    let mut pixmap = Pixmap::new(width, height)
-        .ok_or("Failed to create pixmap")
-        .unwrap();
+    let mut pixmap = Pixmap::new(width, height).ok_or("Failed to create pixmap".to_owned())?;
 
     resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
 
-    Ok(pixmap.encode_png().unwrap())
+    Ok(pixmap
+        .encode_png()
+        .map_err(|err| AppError::Io(err.into()))?)
 }
 
 fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
-    let blur_sigma = 3.5;
-    let brightness = -35;
-    let city_width = 1920;
-    let city_height = 270;
+    const BORDER_SIZE: u32 = 2;
+    const CITY_WIDTH: u32 = 1920;
+    const CITY_HEIGHT: u32 = 270;
+    const BLUR_SIGMA: f32 = 3.5;
+    const BRIGHTNESS: i32 = -35;
 
-    let content_height = city_height - 4; // actual content height, excluding 2px top and 2px bottom border
+    // actual content height, excluding 2px top and 2px bottom border
+    const CONTENT_HEIGHT: u32 = CITY_HEIGHT - BORDER_SIZE * 2;
 
-    let mut image = image::open(input_path).unwrap();
+    let mut image = image::open(input_path)?;
 
     let (orig_width, orig_height) = image.dimensions();
     let aspect_ratio = orig_height as f32 / orig_width as f32;
-    let new_height = (aspect_ratio * city_width as f32) as u32; // most of backgrounds are not 1920x1080 since the need to calculate new height from aspect ratio
+    let new_height = (aspect_ratio * CITY_WIDTH as f32) as u32; // most of backgrounds are not 1920x1080 hence the need to calculate new height from aspect ratio
 
     image = image.resize_exact(
-        city_width,
+        CITY_WIDTH,
         new_height,
         image::imageops::FilterType::Lanczos3,
     );
 
-    let top = if new_height < content_height {
+    let top = if new_height < CONTENT_HEIGHT {
         0
     } else {
-        (new_height - content_height) / 2
+        (new_height - CONTENT_HEIGHT) / 2
     };
 
-    let cropped = imageops::crop(&mut image, 0, top, city_width, content_height);
-    let mut cropped_img = DynamicImage::ImageRgba8(cropped.to_image()); // convert to DynamicImage to apply effects
-
-    cropped_img = cropped_img.brighten(brightness);
-    cropped_img = cropped_img.blur(blur_sigma);
+    let cropped = imageops::crop(&mut image, 0, top, CITY_WIDTH, CONTENT_HEIGHT);
+    let cropped_img = DynamicImage::ImageRgba8(cropped.to_image()) // convert to DynamicImage to apply effects
+        .brighten(BRIGHTNESS)
+        .blur(BLUR_SIGMA);
 
     // create a new image of exact height 270 with 2px white borders at top and bottom
     let mut final_img =
-        ImageBuffer::from_pixel(city_width, city_height, Rgba([255, 255, 255, 255]));
+        ImageBuffer::from_pixel(CITY_WIDTH, CITY_HEIGHT, Rgba([255, 255, 255, 255]));
 
-    imageops::replace(&mut final_img, &cropped_img, 0, 2); // paste the cropped image into the center, leaving 2px top and bottom
+    imageops::replace(&mut final_img, &cropped_img, 0, BORDER_SIZE as i64); // paste the cropped image into the center, leaving 2px top and bottom
 
-    final_img
+    final_img.save_with_format(output_path, ImageFormat::WebP)?;
+
+    Ok(())
+}
+
+fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
+    const TARGET_WIDTH: u32 = 120;
+    const TARGET_HEIGHT: u32 = 150;
+
+    let mut image = image::open(input_path).unwrap();
+
+    image = image.resize_exact(
+        TARGET_WIDTH,
+        TARGET_HEIGHT,
+        image::imageops::FilterType::Lanczos3,
+    );
+
+    image
         .save_with_format(output_path, ImageFormat::WebP)
         .unwrap();
 
     Ok(())
 }
 
-fn process_backgrounds(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<time::Duration> {
-    let start_time = time::Instant::now();
+#[derive(Debug, Clone, Copy)]
+enum FileSet {
+    Background,
+    Coa,
+}
 
+async fn process_file(
+    file_path: Arc<PathBuf>,
+    edited_path: Arc<PathBuf>,
+    file_set: FileSet,
+    counter: Arc<AtomicU32>,
+    total: usize,
+) -> AppResult<()> {
+    let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
+    let output_path = edited_path.join(format!("{}.webp", file_stem));
+
+    let res = match file_set {
+        FileSet::Background => edit_background(&file_path, &output_path),
+        FileSet::Coa => edit_coa(&file_path, &output_path),
+    };
+
+    let count = counter.fetch_add(1, Ordering::Relaxed) + 1;
+
+    match res {
+        Ok(()) => log!(
+            [LogStyle::Green],
+            &format!("OK{:>13}", format!("{count}/{total}",)),
+            "Saved {} to {}{output_path:?}{}",
+            match file_set {
+                FileSet::Background => "background",
+                FileSet::Coa => "COA",
+            },
+            LogStyle::Cyan,
+            LogStyle::Clear,
+        ),
+
+        Err(ref e) => log!(
+            [LogStyle::Red],
+            &format!("ERR{:>12}", format!("{count}/{total}",)),
+            "Failed to process {file_stem}: {e}",
+        ),
+    };
+
+    res
+}
+
+async fn process_file_set(
+    paths: &Paths,
+    dataset: &[Voivodeship],
+    file_set: FileSet,
+) -> AppResult<ReturnReport> {
+    let start_time = time::Instant::now();
     let mut stem_to_filename: HashMap<String, String> = HashMap::new();
-    for entry in read_dir(&paths.backgrounds)? {
+
+    let unedited_path = match file_set {
+        FileSet::Background => &paths.backgrounds,
+        FileSet::Coa => &paths.coas,
+    };
+
+    let edited_path = match file_set {
+        FileSet::Background => &paths.edited_backgrounds,
+        FileSet::Coa => &paths.edited_coas,
+    };
+
+    for entry in read_dir(unedited_path)? {
         let entry = entry?;
         let path = entry.path();
-        if let (Some(stem), Some(ext)) = (file_stem(&entry), path.extension()) {
+        if let (Some(stem), Some(ext)) = (file_stem(&entry.path()), path.extension()) {
             stem_to_filename.insert(stem, ext.to_str().unwrap().to_owned());
         }
     }
 
-    let mut edited_backgrounds_stems = HashSet::new();
-    for entry in read_dir(&paths.edited_backgrounds)? {
-        if let Some(stem) = file_stem(&entry?) {
-            edited_backgrounds_stems.insert(stem);
+    let mut edited_file_stems = HashSet::new();
+    for entry in read_dir(edited_path)? {
+        if let Some(stem) = file_stem(&entry?.path()) {
+            edited_file_stems.insert(stem);
         }
     }
 
-    let mut backgrounds_paths = Vec::new();
+    let mut file_paths = Vec::new();
     for voivodeship in dataset.iter() {
         for city in voivodeship.content.iter() {
             let stem = format_file_name(city);
-            let has_bg = edited_backgrounds_stems.contains(&stem);
+            let is_present = edited_file_stems.contains(&stem);
 
-            if !has_bg && let Some(ext) = stem_to_filename.get(&stem) {
+            if !is_present && let Some(ext) = stem_to_filename.get(&stem) {
                 let full_filename = format!("{stem}.{ext}");
-                let file_path = paths.backgrounds.join(full_filename);
-                backgrounds_paths.push(file_path);
+                let file_path = unedited_path.join(full_filename);
+                file_paths.push(file_path);
             }
         }
     }
 
-    log!(
-        [LogStyle::Blue],
-        "IMAGE_EDITOR",
-        "Found {} backgrounds that need processing",
-        backgrounds_paths.len()
-    );
-
-    for file_path in backgrounds_paths.iter_mut() {
-        if file_path.extension().unwrap().to_owned() == "svg" {
-            let file_stem = file_path.file_stem().unwrap().to_str().unwrap().to_owned();
-            let svg_data = read_to_string(file_path.clone()).unwrap();
-            let png_data = svg_to_png(&svg_data).unwrap();
-            let file_name = format!("{}.png", file_stem);
-            let new_path = paths.backgrounds.join(file_name);
-
-            log!(
-                [LogStyle::Blue],
-                "SVG",
-                "Detected SVG file, converting to PNG: {}",
-                new_path.to_str().to_owned().unwrap()
-            );
-
-            write(&new_path, png_data).unwrap();
-
-            *file_path = new_path;
-        }
-    }
-
-    for file_path in backgrounds_paths {
-        let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
-        let output_path = paths.edited_backgrounds.join(format!("{}.webp", file_stem));
-
-        match edit_background(&file_path, &output_path) {
-            Ok(()) => log!(
-                [LogStyle::Green],
-                "IMAGE_EDITOR",
-                "Successfully processed: {}",
-                file_stem
-            ),
-            Err(e) => log!(
-                [LogStyle::Red],
-                "IMAGE_EDITOR",
-                "Failed to process {}: {}",
-                file_stem,
-                e
-            ),
-        }
-    }
-
-    Ok(start_time.elapsed())
-}
-
-fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
-    let target_width = 120;
-    let target_height = 150;
-
-    let mut image = image::open(input_path).unwrap();
-
-    image = image.resize_exact(
-        target_width,
-        target_height,
-        image::imageops::FilterType::Lanczos3,
-    );
-
-    image.save_with_format(output_path, ImageFormat::WebP).unwrap();
-
-    Ok(())
-}
-
-fn process_coa(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<time::Duration> {
-    let start_time = time::Instant::now();
-
-    let mut stem_to_filename: HashMap<String, String> = HashMap::new();
-    for entry in read_dir(&paths.coas)? {
-        let entry = entry?;
-        let path = entry.path();
-        if let (Some(stem), Some(ext)) = (file_stem(&entry), path.extension()) {
-            stem_to_filename.insert(stem, ext.to_str().unwrap().to_owned());
-        }
-    }
-
-    let mut edited_coas_stems = HashSet::new();
-    for entry in read_dir(&paths.edited_coas)? {
-        if let Some(stem) = file_stem(&entry?) {
-            edited_coas_stems.insert(stem);
-        }
-    }
-
-    let mut coas_paths = Vec::new();
-    for voivodeship in dataset.iter() {
-        for city in voivodeship.content.iter() {
-            let stem = format_file_name(city);
-            let has_bg = edited_coas_stems.contains(&stem);
-
-            if !has_bg && let Some(ext) = stem_to_filename.get(&stem) {
-                let full_filename = format!("{stem}.{ext}");
-                let file_path = paths.coas.join(full_filename);
-                coas_paths.push(file_path);
-            }
-        }
-    }
+    let amount_to_scrape = file_paths.len();
 
     log!(
         [LogStyle::Blue],
-        "IMAGE_EDITOR",
-        "Found {} COAs that need processing",
-        coas_paths.len()
+        "IMAGE EDITOR",
+        "Found {} {} that need{} processing",
+        amount_to_scrape,
+        match file_set {
+            FileSet::Background if amount_to_scrape == 1 => "background",
+            FileSet::Coa if amount_to_scrape == 1 => "COA",
+            FileSet::Background => "backgrounds",
+            FileSet::Coa => "COAs",
+        },
+        if amount_to_scrape == 1 { "s" } else { "" }
     );
 
-    for file_path in coas_paths.iter_mut() {
-        if file_path.extension().unwrap().to_owned() == "svg" {
-            let file_stem = file_path.file_stem().unwrap().to_str().unwrap().to_owned();
-            let svg_data = read_to_string(file_path.clone()).unwrap();
-            let png_data = svg_to_png(&svg_data).unwrap();
+    for file_path in file_paths.iter_mut() {
+        if file_path.extension().unwrap() == "svg" {
+            let file_stem = file_stem(file_path).unwrap();
+            let svg_data = read_to_string(file_path.clone())?;
+            let png_data = svg_to_png(&svg_data)?;
             let file_name = format!("{}.png", file_stem);
             let new_path = paths.coas.join(file_name);
 
             log!(
                 [LogStyle::Blue],
                 "SVG",
-                "Detected SVG file, converting to PNG: {}",
-                new_path.to_str().to_owned().unwrap()
+                "Detected SVG file, converting to PNG: {new_path:?}",
             );
 
             write(&new_path, png_data).unwrap();
@@ -240,38 +232,58 @@ fn process_coa(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<time::Durati
         }
     }
 
-    for file_path in coas_paths {
-        let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
-        let output_path = paths.edited_coas.join(format!("{}.webp", file_stem));
+    let total = file_paths.len();
+    let counter = Arc::new(AtomicU32::new(0));
+    let file_paths: Vec<Arc<PathBuf>> = file_paths.into_iter().map(Arc::new).collect();
+    let edited_path = Arc::new(edited_path.clone());
 
-        match edit_coa(&file_path, &output_path) {
-            Ok(()) => log!(
-                [LogStyle::Green],
-                "IMAGE_EDITOR",
-                "Successfully processed: {}",
-                file_stem
-            ),
-            Err(e) => log!(
-                [LogStyle::Red],
-                "IMAGE_EDITOR",
-                "Failed to process {}: {}",
-                file_stem,
-                e
-            ),
+    let mut amount_ok = 0;
+
+    for chunk in file_paths.chunks(CONCURRENT_JOBS) {
+        let mut join_set = JoinSet::new();
+        for file_path in chunk.iter() {
+            join_set.spawn(process_file(
+                file_path.clone(),
+                edited_path.clone(),
+                file_set,
+                counter.clone(),
+                total,
+            ));
         }
+
+        amount_ok += join_set
+            .join_all()
+            .await
+            .iter()
+            .filter(|res| res.is_ok())
+            .count();
     }
 
-    Ok(start_time.elapsed())
+    Ok(ReturnReport {
+        job_name: "IMAGE EDITOR: ".to_owned()
+            + match file_set {
+                FileSet::Background => "BG",
+                FileSet::Coa => "COA",
+            },
+        duration: start_time.elapsed(),
+        amount_ok,
+        amount_err: total - amount_ok,
+    })
 }
 
-pub async fn process_assets(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<(time::Duration, time::Duration)> {
+pub async fn process_assets(
+    paths: &Paths,
+    dataset: &[Voivodeship],
+) -> AppResult<(ReturnReport, ReturnReport)> {
     ensure_exists(&paths.backgrounds)?;
     ensure_exists(&paths.edited_backgrounds)?;
     ensure_exists(&paths.coas)?;
     ensure_exists(&paths.edited_coas)?;
 
-    let background_time = process_backgrounds(paths, dataset).unwrap();
-    let coa_time = process_coa(paths, dataset).unwrap();
+    let background_report = process_file_set(paths, dataset, FileSet::Background).await?;
+    log!([LogStyle::Purple], "JOB DONE", "{}", background_report);
+    let coa_report = process_file_set(paths, dataset, FileSet::Coa).await?;
+    log!([LogStyle::Purple], "JOB DONE", "{}", coa_report);
 
-    Ok((background_time, coa_time))
+    Ok((background_report, coa_report))
 }
