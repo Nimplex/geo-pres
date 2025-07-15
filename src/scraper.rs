@@ -4,7 +4,8 @@ use crate::{
     parser::{VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
     utils::{
-        AppError, AppResult, ensure_exists, file_stem, format_file_name, format_file_name_parts,
+        AppError, AppResult, ReturnReport, ensure_exists, file_stem, format_file_name,
+        format_file_name_parts,
     },
 };
 use regex::Regex;
@@ -132,7 +133,10 @@ async fn try_page<const N: usize, const M: usize>(
 
     log!(
         [LogStyle::Red],
-        "PARSER ERR",
+        &format!(
+            "ERR{:>12}",
+            format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed) + 1)
+        ),
         "No image found for city {city_name}.",
     );
 
@@ -142,7 +146,7 @@ async fn try_page<const N: usize, const M: usize>(
 pub async fn get_links(
     paths: &Paths,
     dataset: &[Voivodeship; VOIVODESHIP_COUNT],
-) -> AppResult<(time::Duration, Vec<(String, Links)>)> {
+) -> AppResult<(ReturnReport, Vec<(String, Links)>)> {
     let start_time = time::Instant::now();
 
     ensure_exists(&paths.coas)?;
@@ -152,14 +156,14 @@ pub async fn get_links(
 
     let mut backgrounds_stems = HashSet::new();
     for entry in read_dir(&paths.backgrounds)? {
-        if let Some(stem) = file_stem(&entry?) {
+        if let Some(stem) = file_stem(&entry?.path()) {
             backgrounds_stems.insert(stem);
         }
     }
 
     let mut coa_stems = HashSet::new();
     for entry in read_dir(&paths.coas)? {
-        if let Some(stem) = file_stem(&entry?) {
+        if let Some(stem) = file_stem(&entry?.path()) {
             coa_stems.insert(stem);
         }
     }
@@ -176,11 +180,18 @@ pub async fn get_links(
         }
     }
 
+    let len = cities.len();
+
     log!(
         [LogStyle::Blue],
         "SCRAPER",
-        "Found {} cities that need scraping",
-        cities.len()
+        "Found {} {}",
+        len,
+        if len == 1 {
+            "city that needs scraping"
+        } else {
+            "cities that need scraping"
+        },
     );
 
     let repeating_names: HashSet<&str> = {
@@ -262,19 +273,16 @@ pub async fn get_links(
     }
 
     let collected_links: Vec<_> = links.into_iter().flatten().collect();
-    log!(
-        [LogStyle::Purple],
-        "SCRAPER DONE",
-        "Finished scraping in {:.4} s; {}{}{} OK, {}{}{} errors",
-        start_time.elapsed().as_secs_f32(),
-        LogStyle::Green,
-        collected_links.len(),
-        LogStyle::Clear,
-        LogStyle::Red,
-        total_downloads - collected_links.len(),
-        LogStyle::Clear,
-    );
-    Ok((start_time.elapsed(), collected_links))
+
+    Ok((
+        ReturnReport {
+            job_name: "SCRAPER".into(),
+            duration: start_time.elapsed(),
+            amount_ok: collected_links.len(),
+            amount_err: total_downloads - collected_links.len(),
+        },
+        collected_links,
+    ))
 }
 
 async fn download_image(
@@ -349,7 +357,7 @@ async fn download_image(
     Ok(())
 }
 
-pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<time::Duration> {
+pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<ReturnReport> {
     let start_time = time::Instant::now();
 
     ensure_exists(&paths.coas)?;
@@ -398,19 +406,12 @@ pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppRe
         let mut vec = join_set.join_all().await;
         total_downloaded.append(&mut vec);
     }
-    let total_downloaded = total_downloaded.into_iter().filter(|x| x.is_ok()).count() * 2;
+    let total_downloaded = total_downloaded.into_iter().filter(Result::is_ok).count() * 2;
 
-    log!(
-        [LogStyle::Purple],
-        "DOWNLOADS DONE",
-        "Finished downloading files in {:.4} s; {}{}{} OK, {}{}{} errors",
-        start_time.elapsed().as_secs_f32(),
-        LogStyle::Green,
-        total_downloaded,
-        LogStyle::Clear,
-        LogStyle::Red,
-        total_to_download - total_downloaded,
-        LogStyle::Clear,
-    );
-    Ok(start_time.elapsed())
+    Ok(ReturnReport {
+        job_name: "DOWNLOADER".into(),
+        duration: start_time.elapsed(),
+        amount_ok: total_downloaded,
+        amount_err: total_to_download - total_downloaded,
+    })
 }
