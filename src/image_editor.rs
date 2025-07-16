@@ -44,7 +44,7 @@ fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
     const BORDER_SIZE: u32 = 2;
     const CITY_WIDTH: u32 = 1920;
     const CITY_HEIGHT: u32 = 270; // hardcoded value, 1080 / 4 entries = 270 pixels per entry. Also check pres_gen for entry generation
-    const BLUR_SIGMA: f32 = 3.5;
+    const BLUR_SIGMA: f32 = 2.5;
     const BRIGHTNESS: i32 = -35;
 
     // actual content height, excluding 2px top and 2px bottom border
@@ -85,8 +85,8 @@ fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
 }
 
 fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
-    const TARGET_WIDTH: u32 = 120;
-    const TARGET_HEIGHT: u32 = 150;
+    const TARGET_WIDTH: u32 = 176;
+    const TARGET_HEIGHT: u32 = 206;
 
     let mut image = image::open(input_path).unwrap();
 
