@@ -1,0 +1,7 @@
+64px-Breezeicons-actions-22-taxes-finances.svg.png, 64px-Breezeicons-actions-22-user-group-new.svg.png, 64px-Breezeicons-actions-22-zoom-in.svg.png
+
+© 2014 Andreas Kainz & Uri Herrera & Andrew Lake & Marco Martin & Harald Sitter & Jonathan Riddell & Ken Vermette & Aleix Pol & David Faure & Albert Vaca & Luca Beltrame & Gleb Popov & Nuno Pinheiro & Alex Richardson &  Jan Grulich & Bernhard Landauer & Heiko Becker & Volker Krause & David Rosca & Phil Schaf / KDE
+
+source: https://commons.wikimedia.org/wiki/File:Breezeicons-actions-22-zoom-in.svg
+source: https://commons.wikimedia.org/wiki/File:Breezeicons-actions-22-user-group-new.svg
+source: https://commons.wikimedia.org/wiki/File:Breezeicons-actions-22-taxes-finances.svg

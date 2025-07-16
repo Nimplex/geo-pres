@@ -43,7 +43,7 @@ fn svg_to_png(svg_data: &str) -> AppResult<Vec<u8>> {
 fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
     const BORDER_SIZE: u32 = 2;
     const CITY_WIDTH: u32 = 1920;
-    const CITY_HEIGHT: u32 = 270;
+    const CITY_HEIGHT: u32 = 270; // hardcoded value, 1080 / 4 entries = 270 pixels per entry. Also check pres_gen for entry generation
     const BLUR_SIGMA: f32 = 3.5;
     const BRIGHTNESS: i32 = -35;
 

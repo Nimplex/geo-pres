@@ -1,10 +1,5 @@
 use crate::{
-    image_editor::process_assets,
-    logger::{LogStyle, log_msg},
-    parser::{Voivodeship, parse_csv},
-    paths::Paths,
-    scraper::{download_assets, get_links},
-    utils::AppResult,
+    image_editor::process_assets, logger::{log_msg, LogStyle}, parser::{parse_csv, Voivodeship}, paths::Paths, pres_gen::generate_slides, scraper::{download_assets, get_links}, utils::AppResult
 };
 
 mod image_editor;
@@ -13,6 +8,7 @@ mod parser;
 mod paths;
 mod scraper;
 mod utils;
+mod pres_gen;
 
 fn display_dataset(dataset: &[Voivodeship]) {
     log!(
@@ -56,6 +52,8 @@ async fn main() -> AppResult<()> {
     log!([LogStyle::Purple], "JOB DONE", "{}", downloader_report);
 
     let (background_edit_report, coa_edit_report) = process_assets(&paths, &dataset).await?;
+
+    generate_slides(&paths, &dataset).unwrap();
 
     log!(
         [LogStyle::Purple, LogStyle::Bold],
