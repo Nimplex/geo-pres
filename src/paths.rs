@@ -9,6 +9,7 @@ pub struct Paths {
     pub backgrounds: PathBuf,
     pub edited_backgrounds: PathBuf,
     pub slides: PathBuf,
+    pub fonts: PathBuf,
 }
 
 pub fn workspace_root() -> AppResult<PathBuf> {
@@ -39,6 +40,7 @@ impl Paths {
             backgrounds: data.join("backgrounds"),
             edited_backgrounds: data.join("edited-backgrounds"),
             slides: data.join("slides"),
+            fonts: data.join("fonts"),
         })
     }
 }
