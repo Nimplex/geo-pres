@@ -1,9 +1,7 @@
-.venv
-out.json
-node_modules
 data/presentation.pptx
 data/coats-of-arms
 data/backgrounds
 data/slides
 data/edited-backgrounds
 data/edited-coats-of-arms
+target/
