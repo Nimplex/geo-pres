@@ -10,7 +10,7 @@ pub struct Paths {
     pub edited_backgrounds: PathBuf,
     pub slides: PathBuf,
     pub fonts: PathBuf,
-    pub icons: PathBuf
+    pub icons: PathBuf,
 }
 
 pub fn workspace_root() -> AppResult<PathBuf> {

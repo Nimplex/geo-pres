@@ -1,7 +1,7 @@
-use std::fs::read;
+use std::{cmp, fs::read};
 
 use ab_glyph::{FontArc, PxScale};
-use image::{ImageBuffer, ImageFormat, Rgb, Rgba, RgbaImage};
+use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage, imageops::overlay};
 use imageproc::drawing::{draw_text_mut, text_size};
 
 use crate::{
@@ -15,6 +15,11 @@ use crate::{
 struct Fonts {
     regular: FontArc,
     bold: FontArc,
+}
+
+struct Icons {
+    population: ImageBuffer<Rgba<u8>, Vec<u8>>,
+    area: ImageBuffer<Rgba<u8>, Vec<u8>>,
 }
 
 fn draw_text(
@@ -54,13 +59,14 @@ fn draw_text(
 fn generate_entry(
     paths: &Paths,
     font: &Fonts,
+    icons: &Icons,
     city: &City,
 ) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     let background_filename = format!("{}.webp", format_file_name(city));
     let background_path = paths.edited_backgrounds.join(background_filename);
     let mut image = image::open(background_path)?.to_rgba8();
 
-    let (mut width, mut height) = draw_text(
+    let (_, height) = draw_text(
         &mut image,
         &city.name,
         &font.bold,
@@ -70,14 +76,61 @@ fn generate_entry(
         Rgba([255u8, 255u8, 255u8, 255u8]),
     );
 
-    let (mut width, mut height) = draw_text(
+    draw_text(
         &mut image,
         format!("pow. {}", &city.powiat).as_str(),
         &font.regular,
         32,
-        32 * 2 + (height as i32),
+        32 * 2 + height as i32,
         48f32,
         Rgba([200u8, 200u8, 200u8, 255u8]),
+    );
+
+    let img_width = image.width() as i32;
+
+    let population_text = format!("{} ({}/km²)", city.total_population, city.population_per_km);
+    let population_text_size = text_size(PxScale::from(48f32), &font.regular, &population_text);
+    let population_x = img_width - 32 - population_text_size.0 as i32;
+    let population_y = 32;
+    let population_icon_y =
+        population_y - (icons.population.height() as i32 / 2) + (population_text_size.1 / 2) as i32;
+
+    let area_text = format!("{} km² ({} ha)", city.area_km, city.area_ha);
+    let area_text_size = text_size(PxScale::from(48f32), &font.regular, &area_text);
+    let area_x = img_width - 32 - area_text_size.0 as i32;
+    let area_y = population_y + population_text_size.1 as i32 + 32;
+    let area_icon_y = area_y - (icons.area.height() as i32 / 2) + (area_text_size.1 / 2) as i32;
+
+    draw_text(
+        &mut image,
+        &population_text,
+        &font.regular,
+        population_x,
+        population_y as i32,
+        48f32,
+        Rgba([255u8, 255u8, 255u8, 255u8]),
+    );
+    overlay(
+        &mut image,
+        &icons.population,
+        cmp::min(population_x, area_x) as i64 - icons.population.width() as i64 - 16 as i64,
+        population_icon_y as i64,
+    );
+
+    draw_text(
+        &mut image,
+        &area_text,
+        &font.regular,
+        area_x,
+        area_y as i32,
+        48f32,
+        Rgba([255u8, 255u8, 255u8, 255u8]),
+    );
+    overlay(
+        &mut image,
+        &icons.area,
+        cmp::min(population_x, area_x) as i64 - icons.area.width() as i64 - 16 as i64,
+        area_icon_y as i64,
     );
 
     Ok(image)
@@ -96,11 +149,21 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> 
         bold: FontArc::try_from_vec(bold_font_data).expect("Couldn't load bold font"),
     };
 
+    log!([LogStyle::Purple], "PRES_GEN", "{}", "Loading icons");
+
+    let area_icon = image::open(paths.icons.join("area.png"))?;
+    let population_icon = image::open(paths.icons.join("population.png"))?;
+
+    let icons = Icons {
+        area: area_icon.to_rgba8(),
+        population: population_icon.to_rgba8(),
+    };
+
     for voivodeship in dataset.iter() {
         for city in voivodeship.content.iter() {
             let file_name = format!("{}.webp", format_file_name(city));
             let file_path = paths.slides.join(file_name);
-            let entry = generate_entry(paths, &fonts, &city)?;
+            let entry = generate_entry(paths, &fonts, &icons, &city)?;
             entry.save_with_format(file_path, ImageFormat::WebP)?;
         }
     }
