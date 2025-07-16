@@ -62,15 +62,26 @@ fn generate_entry(
     icons: &Icons,
     city: &City,
 ) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
-    let background_filename = format!("{}.webp", format_file_name(city));
-    let background_path = paths.edited_backgrounds.join(background_filename);
+    let filename = format!("{}.webp", format_file_name(city));
+    let background_path = paths.edited_backgrounds.join(filename.to_owned());
     let mut image = image::open(background_path)?.to_rgba8();
+    let img_height = image.height() as i32;
+    let img_width = image.width() as i32;
 
+    let coa_path = paths.edited_coas.join(filename.to_owned());
+    let coa = image::open(coa_path)?.to_rgba8();
+    let coa_width = coa.width() as i32;
+    let coa_height = coa.height() as i32;
+    let coa_y = img_height / 2 - coa_height / 2;
+
+    overlay(&mut image, &coa, 32, coa_y as i64);
+
+    let text_offset = 64 + coa_width;
     let (_, height) = draw_text(
         &mut image,
         &city.name,
         &font.bold,
-        32,
+        text_offset,
         32,
         80f32,
         Rgba([255u8, 255u8, 255u8, 255u8]),
@@ -80,13 +91,11 @@ fn generate_entry(
         &mut image,
         format!("pow. {}", &city.powiat).as_str(),
         &font.regular,
-        32,
+        text_offset,
         32 * 2 + height as i32,
         48f32,
         Rgba([200u8, 200u8, 200u8, 255u8]),
     );
-
-    let img_width = image.width() as i32;
 
     let population_text = format!("{} ({}/km²)", city.total_population, city.population_per_km);
     let population_text_size = text_size(PxScale::from(48f32), &font.regular, &population_text);
@@ -136,6 +145,28 @@ fn generate_entry(
     Ok(image)
 }
 
+fn generate_slide(
+    paths: &Paths,
+    font: &Fonts,
+    icons: &Icons,
+    cities: &[City],
+) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    let mut entries = Vec::new();
+
+    for city in cities.iter() {
+        let entry = generate_entry(paths, font, icons, city).unwrap();
+        entries.push(entry);
+    }
+
+    let mut canvas = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255u8]));
+
+    for (i, entry) in entries.iter().enumerate() {
+        overlay(&mut canvas, entry, 0, i as i64 * 270);
+    }
+
+    Ok(canvas)
+}
+
 pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> {
     ensure_exists(&paths.slides).unwrap();
 
@@ -160,11 +191,27 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> 
     };
 
     for voivodeship in dataset.iter() {
-        for city in voivodeship.content.iter() {
-            let file_name = format!("{}.webp", format_file_name(city));
-            let file_path = paths.slides.join(file_name);
-            let entry = generate_entry(paths, &fonts, &icons, &city)?;
-            entry.save_with_format(file_path, ImageFormat::WebP)?;
+        log!(
+            [LogStyle::Purple],
+            "PRES_GEN",
+            "Processing voivodeship: {}",
+            voivodeship.name
+        );
+
+        for (slide_index, city_chunk) in voivodeship.content.chunks(4).enumerate() {
+            let slide_filename = format!("{}_{}.webp", voivodeship.name, slide_index);
+
+            let slide_path = paths.slides.join(slide_filename);
+            let slide = generate_slide(paths, &fonts, &icons, city_chunk)?;
+            slide.save_with_format(slide_path, ImageFormat::WebP)?;
+
+            log!(
+                [LogStyle::Green],
+                "PRES_GEN",
+                "Generated slide {} for {}",
+                slide_index,
+                voivodeship.name
+            );
         }
     }
 
