@@ -56,6 +56,26 @@ fn draw_text(
     text_size(scale, font, text)
 }
 
+fn generate_title(font: &Fonts, voivodeship: String) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255u8]));
+
+    let (width, height) = text_size(PxScale::from(64.0), &font.bold, &voivodeship);
+    let x = image.width() / 2 - width / 2;
+    let y = image.height() / 2 - height / 2;
+
+    draw_text(
+        &mut image,
+        &voivodeship,
+        &font.bold,
+        x as i32,
+        y as i32,
+        80f32,
+        Rgba([255u8, 255u8, 255u8, 255u8]),
+    );
+
+    Ok(image)
+}
+
 fn generate_entry(
     paths: &Paths,
     font: &Fonts,
@@ -98,14 +118,14 @@ fn generate_entry(
     );
 
     let population_text = format!("{} ({}/km²)", city.total_population, city.population_per_km);
-    let population_text_size = text_size(PxScale::from(48f32), &font.regular, &population_text);
+    let population_text_size = text_size(PxScale::from(48.0), &font.regular, &population_text);
     let population_x = img_width - 32 - population_text_size.0 as i32;
     let population_y = 32;
     let population_icon_y =
         population_y - (icons.population.height() as i32 / 2) + (population_text_size.1 / 2) as i32;
 
     let area_text = format!("{} km² ({} ha)", city.area_km, city.area_ha);
-    let area_text_size = text_size(PxScale::from(48f32), &font.regular, &area_text);
+    let area_text_size = text_size(PxScale::from(48.0), &font.regular, &area_text);
     let area_x = img_width - 32 - area_text_size.0 as i32;
     let area_y = population_y + population_text_size.1 as i32 + 32;
     let area_icon_y = area_y - (icons.area.height() as i32 / 2) + (area_text_size.1 / 2) as i32;
@@ -116,7 +136,7 @@ fn generate_entry(
         &font.regular,
         population_x,
         population_y as i32,
-        48f32,
+        48.0,
         Rgba([255u8, 255u8, 255u8, 255u8]),
     );
     overlay(
@@ -132,7 +152,7 @@ fn generate_entry(
         &font.regular,
         area_x,
         area_y as i32,
-        48f32,
+        48.0,
         Rgba([255u8, 255u8, 255u8, 255u8]),
     );
     overlay(
@@ -198,9 +218,13 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> 
             voivodeship.name
         );
 
+        let slide = generate_title(&fonts, voivodeship.name.to_owned())?;
+        let slide_filename = format!("{}.webp", voivodeship.name);
+        let slide_path = paths.slides.join(slide_filename);
+        slide.save_with_format(slide_path, ImageFormat::WebP)?;
+
         for (slide_index, city_chunk) in voivodeship.content.chunks(4).enumerate() {
             let slide_filename = format!("{}_{}.webp", voivodeship.name, slide_index);
-
             let slide_path = paths.slides.join(slide_filename);
             let slide = generate_slide(paths, &fonts, &icons, city_chunk)?;
             slide.save_with_format(slide_path, ImageFormat::WebP)?;
