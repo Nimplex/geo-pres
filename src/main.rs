@@ -3,7 +3,7 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{Voivodeship, parse_csv},
     paths::Paths,
-    pres_gen::generate_slides,
+    slides_gen::generate_slides,
     scraper::{download_assets, get_links},
     utils::AppResult,
 };
@@ -12,7 +12,7 @@ mod image_editor;
 mod logger;
 mod parser;
 mod paths;
-mod pres_gen;
+mod slides_gen;
 mod scraper;
 mod utils;
 
@@ -67,6 +67,8 @@ async fn main() -> AppResult<()> {
         "Finished processing. Stats:\n{}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}",
         "=".repeat(60),
     );
+
+    log!([LogStyle::Bold], "FINISHED", "Now run 'bun run pres_gen/main.ts' to compile presentation");
 
     Ok(())
 }

@@ -6,10 +6,10 @@ use imageproc::drawing::{draw_text_mut, text_size};
 
 use crate::{
     log,
-    logger::{LogStyle, log_msg},
+    logger::{log_msg, LogStyle},
     parser::{City, Voivodeship},
     paths::Paths,
-    utils::{AppResult, ensure_exists, format_file_name},
+    utils::{capitalize, ensure_exists, format_file_name, AppResult},
 };
 
 struct Fonts {
@@ -59,13 +59,15 @@ fn draw_text(
 fn generate_title(font: &Fonts, voivodeship: String) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255u8]));
 
-    let (width, height) = text_size(PxScale::from(64.0), &font.bold, &voivodeship);
+    let text = format!("woj. {}", capitalize(&voivodeship.to_owned()));
+
+    let (width, height) = text_size(PxScale::from(64.0), &font.bold, &text);
     let x = image.width() / 2 - width / 2;
     let y = image.height() / 2 - height / 2;
 
     draw_text(
         &mut image,
-        &voivodeship,
+        &text,
         &font.bold,
         x as i32,
         y as i32,

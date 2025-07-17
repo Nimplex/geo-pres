@@ -94,3 +94,11 @@ pub fn format_file_name(city: &City) -> String {
 pub fn file_stem(path: &std::path::PathBuf) -> Option<String> {
     Some(path.file_stem().unwrap().to_str()?.to_owned())
 }
+
+pub fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+    }
+}

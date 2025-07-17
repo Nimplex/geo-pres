@@ -1,0 +1,14 @@
+{
+  "name": "pres_gen",
+  "private": true,
+  "main": "main.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}
