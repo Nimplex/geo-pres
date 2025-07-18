@@ -93,16 +93,17 @@ fn generate_entry(
     let coa_width = coa.width() as i32;
     let coa_height = coa.height() as i32;
     let coa_y = img_height / 2 - coa_height / 2;
-
     overlay(&mut image, &coa, 32, coa_y as i64);
 
     let text_offset = 64 + coa_width;
-    let (_, height) = draw_text(
+
+    let name_text_size = text_size(PxScale::from(80.0), &font.bold, &city.name);
+    draw_text(
         &mut image,
         &city.name,
         &font.bold,
         text_offset,
-        32,
+        img_height / 2 - name_text_size.1 as i32 - 8,
         80.0,
         Rgba([255, 255, 255, 255]),
     );
@@ -112,7 +113,7 @@ fn generate_entry(
         &format!("powiat {}", &city.powiat),
         &font.regular,
         text_offset,
-        64 + height as i32,
+        img_height / 2 + 8,
         48.0,
         Rgba([200, 200, 200, 255]),
     );
@@ -120,14 +121,14 @@ fn generate_entry(
     let population_text = format!("{} ({}/km²)", city.total_population, city.population_per_km);
     let population_text_size = text_size(PxScale::from(48.0), &font.regular, &population_text);
     let population_x = img_width - 32 - population_text_size.0 as i32;
-    let population_y = 32;
+    let population_y = img_height / 2 - population_text_size.1 as i32 - 16;
     let population_icon_y =
         population_y - (icons.population.height() as i32 / 2) + (population_text_size.1 as i32 / 2);
 
     let area_text = format!("{} km² ({} ha)", city.area_km, city.area_ha);
     let area_text_size = text_size(PxScale::from(48.0), &font.regular, &area_text);
     let area_x = img_width - 32 - area_text_size.0 as i32;
-    let area_y = population_y + population_text_size.1 as i32 + 32;
+    let area_y = img_height / 2 + 16;
     let area_icon_y = area_y - (icons.area.height() as i32 / 2) + (area_text_size.1 as i32 / 2);
 
     draw_text(
