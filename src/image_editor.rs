@@ -35,9 +35,7 @@ fn svg_to_png(svg_data: &str) -> AppResult<Vec<u8>> {
 
     resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
 
-    Ok(pixmap
-        .encode_png()
-        .map_err(|err| AppError::Io(err.into()))?)
+    pixmap.encode_png().map_err(|err| AppError::Io(err.into()))
 }
 
 fn edit_background(input_path: &Path, output_path: &Path) -> AppResult<()> {
@@ -88,7 +86,7 @@ fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
     const TARGET_WIDTH: u32 = 176;
     const TARGET_HEIGHT: u32 = 206;
 
-    let mut image = image::open(input_path).unwrap();
+    let mut image = image::open(input_path)?;
 
     image = image.resize_exact(
         TARGET_WIDTH,
@@ -96,9 +94,7 @@ fn edit_coa(input_path: &Path, output_path: &Path) -> AppResult<()> {
         image::imageops::FilterType::Lanczos3,
     );
 
-    image
-        .save_with_format(output_path, ImageFormat::WebP)
-        .unwrap();
+    image.save_with_format(output_path, ImageFormat::WebP)?;
 
     Ok(())
 }
@@ -117,7 +113,7 @@ async fn process_file(
     total: usize,
 ) -> AppResult<()> {
     let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
-    let output_path = edited_path.join(format!("{}.webp", file_stem));
+    let output_path = edited_path.join(format!("{file_stem}.webp"));
 
     let res = match file_set {
         FileSet::Background => edit_background(&file_path, &output_path),
@@ -201,8 +197,7 @@ async fn process_file_set(
     log!(
         [LogStyle::Blue],
         "IMAGE EDITOR",
-        "Found {} {} that need{} processing",
-        amount_to_scrape,
+        "Found {amount_to_scrape} {} that need{} processing",
         match file_set {
             FileSet::Background if amount_to_scrape == 1 => "background",
             FileSet::Coa if amount_to_scrape == 1 => "COA",
@@ -215,9 +210,9 @@ async fn process_file_set(
     for file_path in file_paths.iter_mut() {
         if file_path.extension().unwrap() == "svg" {
             let file_stem = file_stem(file_path).unwrap();
-            let svg_data = read_to_string(file_path.clone())?;
+            let svg_data = read_to_string(&file_path)?;
             let png_data = svg_to_png(&svg_data)?;
-            let file_name = format!("{}.png", file_stem);
+            let file_name = format!("{file_stem}.png");
             let new_path = paths.coas.join(file_name);
 
             log!(
@@ -226,7 +221,7 @@ async fn process_file_set(
                 "Detected SVG file, converting to PNG: {new_path:?}",
             );
 
-            write(&new_path, png_data).unwrap();
+            write(&new_path, png_data)?;
 
             *file_path = new_path;
         }
@@ -281,9 +276,9 @@ pub async fn process_assets(
     ensure_exists(&paths.edited_coas)?;
 
     let background_report = process_file_set(paths, dataset, FileSet::Background).await?;
-    log!([LogStyle::Purple], "JOB DONE", "{}", background_report);
+    log!([LogStyle::Purple], "JOB DONE", "{background_report}");
     let coa_report = process_file_set(paths, dataset, FileSet::Coa).await?;
-    log!([LogStyle::Purple], "JOB DONE", "{}", coa_report);
+    log!([LogStyle::Purple], "JOB DONE", "{coa_report}");
 
     Ok((background_report, coa_report))
 }

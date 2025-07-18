@@ -36,12 +36,14 @@ join_error! {
         ImageError(image::error::ImageError),
         Io(io::Error),
         Request(reqwest::Error),
+        InvalidFont(ab_glyph::InvalidFont),
         Other(String),
     }
 }
 
 pub type AppResult<T> = Result<T, AppError>;
 
+#[must_use]
 pub struct ReturnReport {
     pub job_name: String,
     pub duration: std::time::Duration,
@@ -91,8 +93,8 @@ pub fn format_file_name(city: &City) -> String {
     format_file_name_parts(&city.identifier, &city.name)
 }
 
-pub fn file_stem(path: &std::path::PathBuf) -> Option<String> {
-    Some(path.file_stem().unwrap().to_str()?.to_owned())
+pub fn file_stem(path: &std::path::Path) -> Option<String> {
+    Some(path.file_stem()?.to_str()?.to_owned())
 }
 
 pub fn capitalize(s: &str) -> String {
