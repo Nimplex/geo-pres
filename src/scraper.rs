@@ -11,7 +11,7 @@ use crate::{
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
-    fs::read_dir,
+    fs,
     path::Path,
     sync::{
         Arc,
@@ -152,17 +152,21 @@ pub async fn get_links(
     ensure_exists(&paths.coas)?;
     ensure_exists(&paths.backgrounds)?;
 
-    log!([LogStyle::Blue], "SCRAPER", "Checking for existing entries");
+    log!(
+        [LogStyle::Blue],
+        "SCRAPER",
+        "Checking for existing entries..."
+    );
 
     let mut backgrounds_stems = HashSet::new();
-    for entry in read_dir(&paths.backgrounds)? {
+    for entry in fs::read_dir(&paths.backgrounds)? {
         if let Some(stem) = file_stem(&entry?.path()) {
             backgrounds_stems.insert(stem);
         }
     }
 
     let mut coa_stems = HashSet::new();
-    for entry in read_dir(&paths.coas)? {
+    for entry in fs::read_dir(&paths.coas)? {
         if let Some(stem) = file_stem(&entry?.path()) {
             coa_stems.insert(stem);
         }
@@ -185,8 +189,7 @@ pub async fn get_links(
     log!(
         [LogStyle::Blue],
         "SCRAPER",
-        "Found {} {}",
-        len,
+        "Found {len} {}",
         if len == 1 {
             "city that needs scraping"
         } else {
@@ -207,7 +210,6 @@ pub async fn get_links(
     };
 
     let replacement_regex = Arc::new(Regex::new(r"/[^/]*?$").unwrap());
-
     let regexes_list = Arc::new([
         (
             Regex::new(r#"<img .*?alt="Herb" .*?src="(.+?)".*?>"#).unwrap(),
@@ -304,8 +306,7 @@ async fn download_image(
         log!(
             [LogStyle::Red],
             "ERR",
-            "Couldn't download COA for {}: Server returned {}{} {}{}",
-            file_name,
+            "Couldn't download COA for {file_name}: Server returned {}{} {}{}",
             LogStyle::Italic,
             err.status().unwrap().as_u16(),
             err.status().unwrap().canonical_reason().unwrap(),
@@ -340,13 +341,12 @@ async fn download_image(
             "OK{:>13}",
             format!("{}/{total}", counter.fetch_add(1, Ordering::Relaxed) + 1)
         ),
-        "Downloaded! Saving to {}{:?}{}",
+        "Downloaded! Saving to {}{file_path:?}{}",
         LogStyle::Cyan,
-        file_path,
         LogStyle::Clear
     );
 
-    std::fs::write(file_path, bytes).inspect_err(|err| {
+    fs::write(file_path, bytes).inspect_err(|err| {
         log!(
             [LogStyle::Bold, LogStyle::Red],
             "CRITICAL ERROR",
@@ -357,7 +357,10 @@ async fn download_image(
     Ok(())
 }
 
-pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppResult<ReturnReport> {
+pub async fn download_assets(
+    links: Vec<(String, Links)>,
+    paths: &Paths,
+) -> AppResult<ReturnReport> {
     let start_time = time::Instant::now();
 
     ensure_exists(&paths.coas)?;
@@ -365,7 +368,7 @@ pub async fn download_assets(links: Vec<(String, Links)>, paths: Paths) -> AppRe
 
     let client = Arc::new(reqwest::Client::builder().user_agent(USER_AGENT).build()?);
     let counter = Arc::new(AtomicU32::new(0));
-    let paths = Arc::new(paths);
+    let paths = Arc::new(paths.clone());
     let links: Vec<Arc<(String, Links)>> = links.into_iter().map(Arc::new).collect();
     let total_to_download = links.len() * 2;
     let mut total_downloaded = vec![];

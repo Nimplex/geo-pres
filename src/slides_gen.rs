@@ -1,20 +1,18 @@
-use std::{cmp, fs::read};
-
-use ab_glyph::{FontArc, PxScale};
-use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage, imageops::overlay};
-use imageproc::drawing::{draw_text_mut, text_size};
-
 use crate::{
     log,
-    logger::{log_msg, LogStyle},
-    parser::{City, Voivodeship},
+    logger::{LogStyle, log_msg},
+    parser::{City, VOIVODESHIP_COUNT, Voivodeship},
     paths::Paths,
-    utils::{capitalize, ensure_exists, format_file_name, AppResult},
+    utils::{AppResult, ReturnReport, capitalize, ensure_exists, format_file_name},
 };
+use ab_glyph::{FontRef, PxScale};
+use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage, imageops::overlay};
+use imageproc::drawing::{draw_text_mut, text_size};
+use std::fs::read;
 
-struct Fonts {
-    regular: FontArc,
-    bold: FontArc,
+struct Fonts<'a> {
+    regular: FontRef<'a>,
+    bold: FontRef<'a>,
 }
 
 struct Icons {
@@ -25,7 +23,7 @@ struct Icons {
 fn draw_text(
     img: &mut RgbaImage,
     text: &str,
-    font: &FontArc,
+    font: &FontRef,
     x: i32,
     y: i32,
     font_size: f32,
@@ -40,26 +38,26 @@ fn draw_text(
             if dx != 0 || dy != 0 {
                 draw_text_mut(
                     img,
-                    Rgba([0, 0, 0, 255u8]),
+                    Rgba([0, 0, 0, 255]),
                     x + dx,
                     y + dy,
                     scale,
-                    font,
+                    &font,
                     text,
                 );
             }
         }
     }
 
-    draw_text_mut(img, color, x, y, scale, font, text);
+    draw_text_mut(img, color, x, y, scale, &font, text);
 
-    text_size(scale, font, text)
+    text_size(scale, &font, text)
 }
 
-fn generate_title(font: &Fonts, voivodeship: String) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
-    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255u8]));
+fn generate_title(font: &Fonts, voivodeship: &str) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
 
-    let text = format!("woj. {}", capitalize(&voivodeship.to_owned()));
+    let text = format!("woj. {}", capitalize(voivodeship));
 
     let (width, height) = text_size(PxScale::from(64.0), &font.bold, &text);
     let x = image.width() / 2 - width / 2;
@@ -71,8 +69,8 @@ fn generate_title(font: &Fonts, voivodeship: String) -> AppResult<ImageBuffer<Rg
         &font.bold,
         x as i32,
         y as i32,
-        80f32,
-        Rgba([255u8, 255u8, 255u8, 255u8]),
+        80.0,
+        Rgba([255, 255, 255, 255]),
     );
 
     Ok(image)
@@ -85,12 +83,12 @@ fn generate_entry(
     city: &City,
 ) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     let filename = format!("{}.webp", format_file_name(city));
-    let background_path = paths.edited_backgrounds.join(filename.to_owned());
+    let background_path = paths.edited_backgrounds.join(&filename);
     let mut image = image::open(background_path)?.to_rgba8();
     let img_height = image.height() as i32;
     let img_width = image.width() as i32;
 
-    let coa_path = paths.edited_coas.join(filename.to_owned());
+    let coa_path = paths.edited_coas.join(filename);
     let coa = image::open(coa_path)?.to_rgba8();
     let coa_width = coa.width() as i32;
     let coa_height = coa.height() as i32;
@@ -105,18 +103,18 @@ fn generate_entry(
         &font.bold,
         text_offset,
         32,
-        80f32,
-        Rgba([255u8, 255u8, 255u8, 255u8]),
+        80.0,
+        Rgba([255, 255, 255, 255]),
     );
 
     draw_text(
         &mut image,
-        format!("pow. {}", &city.powiat).as_str(),
+        &format!("powiat {}", &city.powiat),
         &font.regular,
         text_offset,
-        32 * 2 + height as i32,
-        48f32,
-        Rgba([200u8, 200u8, 200u8, 255u8]),
+        64 + height as i32,
+        48.0,
+        Rgba([200, 200, 200, 255]),
     );
 
     let population_text = format!("{} ({}/km²)", city.total_population, city.population_per_km);
@@ -124,27 +122,27 @@ fn generate_entry(
     let population_x = img_width - 32 - population_text_size.0 as i32;
     let population_y = 32;
     let population_icon_y =
-        population_y - (icons.population.height() as i32 / 2) + (population_text_size.1 / 2) as i32;
+        population_y - (icons.population.height() as i32 / 2) + (population_text_size.1 as i32 / 2);
 
     let area_text = format!("{} km² ({} ha)", city.area_km, city.area_ha);
     let area_text_size = text_size(PxScale::from(48.0), &font.regular, &area_text);
     let area_x = img_width - 32 - area_text_size.0 as i32;
     let area_y = population_y + population_text_size.1 as i32 + 32;
-    let area_icon_y = area_y - (icons.area.height() as i32 / 2) + (area_text_size.1 / 2) as i32;
+    let area_icon_y = area_y - (icons.area.height() as i32 / 2) + (area_text_size.1 as i32 / 2);
 
     draw_text(
         &mut image,
         &population_text,
         &font.regular,
         population_x,
-        population_y as i32,
+        population_y,
         48.0,
-        Rgba([255u8, 255u8, 255u8, 255u8]),
+        Rgba([255, 255, 255, 255]),
     );
     overlay(
         &mut image,
         &icons.population,
-        cmp::min(population_x, area_x) as i64 - icons.population.width() as i64 - 16 as i64,
+        population_x.min(area_x) as i64 - icons.population.width() as i64 - 16,
         population_icon_y as i64,
     );
 
@@ -153,14 +151,14 @@ fn generate_entry(
         &area_text,
         &font.regular,
         area_x,
-        area_y as i32,
+        area_y,
         48.0,
-        Rgba([255u8, 255u8, 255u8, 255u8]),
+        Rgba([255, 255, 255, 255]),
     );
     overlay(
         &mut image,
         &icons.area,
-        cmp::min(population_x, area_x) as i64 - icons.area.width() as i64 - 16 as i64,
+        population_x.min(area_x) as i64 - icons.area.width() as i64 - 16,
         area_icon_y as i64,
     );
 
@@ -173,14 +171,12 @@ fn generate_slide(
     icons: &Icons,
     cities: &[City],
 ) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
-    let mut entries = Vec::new();
+    let entries = cities
+        .iter()
+        .map(|city| generate_entry(paths, font, icons, city))
+        .collect::<AppResult<Vec<_>>>()?;
 
-    for city in cities.iter() {
-        let entry = generate_entry(paths, font, icons, city).unwrap();
-        entries.push(entry);
-    }
-
-    let mut canvas = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255u8]));
+    let mut canvas = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
 
     for (i, entry) in entries.iter().enumerate() {
         overlay(&mut canvas, entry, 0, i as i64 * 270);
@@ -189,20 +185,21 @@ fn generate_slide(
     Ok(canvas)
 }
 
-pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> {
-    ensure_exists(&paths.slides).unwrap();
+pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<ReturnReport> {
+    let start_time = std::time::Instant::now();
+    ensure_exists(&paths.slides)?;
 
-    log!([LogStyle::Purple], "PRES_GEN", "{}", "Loading fonts");
+    log!([LogStyle::Blue], "PRES GEN", "Loading fonts...");
 
     let regular_font_data = read(paths.fonts.join("BonaNova-Regular.ttf"))?;
     let bold_font_data = read(paths.fonts.join("BonaNova-Bold.ttf"))?;
 
     let fonts = Fonts {
-        regular: FontArc::try_from_vec(regular_font_data).expect("Couldn't load regular font"),
-        bold: FontArc::try_from_vec(bold_font_data).expect("Couldn't load bold font"),
+        regular: FontRef::try_from_slice(&regular_font_data)?,
+        bold: FontRef::try_from_slice(&bold_font_data)?,
     };
 
-    log!([LogStyle::Purple], "PRES_GEN", "{}", "Loading icons");
+    log!([LogStyle::Blue], "PRES GEN", "Loading icons...");
 
     let area_icon = image::open(paths.icons.join("area.png"))?;
     let population_icon = image::open(paths.icons.join("population.png"))?;
@@ -212,15 +209,20 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> 
         population: population_icon.to_rgba8(),
     };
 
-    for voivodeship in dataset.iter() {
+    let mut amount_ok = 0;
+
+    for (voivodeship_idx, voivodeship) in dataset.iter().enumerate() {
         log!(
-            [LogStyle::Purple],
-            "PRES_GEN",
+            [LogStyle::Blue, LogStyle::Bold],
+            &format!(
+                "PRES GEN{:>7}",
+                format!("{voivodeship_idx}/{VOIVODESHIP_COUNT}")
+            ),
             "Processing voivodeship: {}",
             voivodeship.name
         );
 
-        let slide = generate_title(&fonts, voivodeship.name.to_owned())?;
+        let slide = generate_title(&fonts, &voivodeship.name)?;
         let slide_filename = format!("{}.webp", voivodeship.name);
         let slide_path = paths.slides.join(slide_filename);
         slide.save_with_format(slide_path, ImageFormat::WebP)?;
@@ -233,13 +235,19 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<()> 
 
             log!(
                 [LogStyle::Green],
-                "PRES_GEN",
-                "Generated slide {} for {}",
-                slide_index,
+                "PRES GEN",
+                "Generated slide {slide_index} for {}",
                 voivodeship.name
             );
         }
+
+        amount_ok += 1;
     }
 
-    Ok(())
+    Ok(ReturnReport {
+        job_name: "PRES GEN".into(),
+        duration: start_time.elapsed(),
+        amount_ok,
+        amount_err: VOIVODESHIP_COUNT - amount_ok,
+    })
 }

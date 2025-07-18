@@ -3,8 +3,8 @@ use crate::{
     logger::{LogStyle, log_msg},
     parser::{Voivodeship, parse_csv},
     paths::Paths,
-    slides_gen::generate_slides,
     scraper::{download_assets, get_links},
+    slides_gen::generate_slides,
     utils::AppResult,
 };
 
@@ -12,8 +12,8 @@ mod image_editor;
 mod logger;
 mod parser;
 mod paths;
-mod slides_gen;
 mod scraper;
+mod slides_gen;
 mod utils;
 
 fn display_dataset(dataset: &[Voivodeship]) {
@@ -52,23 +52,29 @@ async fn main() -> AppResult<()> {
     display_dataset(&dataset);
 
     let (scraper_report, links) = get_links(&paths, &dataset).await?;
-    log!([LogStyle::Purple], "JOB DONE", "{}", scraper_report);
+    log!([LogStyle::Purple], "JOB DONE", "{scraper_report}");
 
-    let downloader_report = download_assets(links, paths.clone()).await?;
-    log!([LogStyle::Purple], "JOB DONE", "{}", downloader_report);
+    let downloader_report = download_assets(links, &paths).await?;
+    log!([LogStyle::Purple], "JOB DONE", "{downloader_report}");
 
     let (background_edit_report, coa_edit_report) = process_assets(&paths, &dataset).await?;
 
-    generate_slides(&paths, &dataset).unwrap();
+    let slides_gen_report = generate_slides(&paths, &dataset)?;
 
     log!(
         [LogStyle::Purple, LogStyle::Bold],
         "FINISHED",
-        "Finished processing. Stats:\n{}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}",
+        "Finished processing. Stats:\n{}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}\n{slides_gen_report}",
         "=".repeat(60),
     );
 
-    log!([LogStyle::Bold], "FINISHED", "Now run 'bun run pres_gen/main.ts' to compile presentation");
+    log!(
+        [LogStyle::Bold],
+        "FINISHED",
+        "Now run '{}bun run pres_gen/main.ts{}' to compile presentation",
+        LogStyle::Bold,
+        LogStyle::Clear,
+    );
 
     Ok(())
 }
