@@ -44,6 +44,7 @@ join_error! {
 pub type AppResult<T> = Result<T, AppError>;
 
 #[must_use]
+#[derive(Clone, Debug)]
 pub struct ReturnReport {
     pub job_name: String,
     pub duration: std::time::Duration,
@@ -71,6 +72,19 @@ impl std::fmt::Display for ReturnReport {
             LogStyle::Clear,
             if self.amount_err == 1 { "" } else { "s" }
         )
+    }
+}
+
+impl std::ops::Add for ReturnReport {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            job_name: "TOTAL".into(),
+            duration: self.duration + rhs.duration,
+            amount_ok: self.amount_ok + rhs.amount_ok,
+            amount_err: self.amount_err + rhs.amount_err,
+        }
     }
 }
 

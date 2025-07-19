@@ -61,10 +61,16 @@ async fn main() -> AppResult<()> {
 
     let slides_gen_report = generate_slides(&paths, &dataset)?;
 
+    let total = scraper_report.clone()
+        + downloader_report.clone()
+        + background_edit_report.clone()
+        + coa_edit_report.clone()
+        + slides_gen_report.clone();
+
     log!(
         [LogStyle::Purple, LogStyle::Bold],
         "FINISHED",
-        "Finished processing. Stats:\n{}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}\n{slides_gen_report}",
+        "Finished processing. Stats:\n{0}\n{scraper_report}\n{downloader_report}\n{background_edit_report}\n{coa_edit_report}\n{slides_gen_report}\n{0}\n{total}",
         "=".repeat(60),
     );
 
