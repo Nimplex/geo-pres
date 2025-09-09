@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 
@@ -11,20 +11,21 @@ const slides = await readdir(slidesDir);
 
 const sortedSlides = slides
     .map((file) => {
-        const match = file.match(/^(.+?)(?:_(\d+))?\.[^.]+$/);
+        const match = file.match(/^(\d+)[_](.+?)(?:_(\d+))?\.[^.]+$/);
         return {
-            region: match?.[1] || file,
-            index: match?.[2] ? parseInt(match[2], 10) : -1,
+            index: parseInt(match?.[1] || "0"),
+            region: match?.[2] || file,
+            slide_index: match?.[3] ? parseInt(match[3], 10) : -1,
             filename: file,
         };
     })
-    .filter(x => x !== "title.webp")
-    .sort((a, b) =>
-        a.region === b.region
-            ? a.index - b.index
-            : a.region.localeCompare(b.region, "pl")
-    );
+    .filter(x => x.filename !== "title.webp")
+    .sort((a, b) => {
+        if (a.index !== b.index) return a.index - b.index;
+        return a.slide_index - b.slide_index;
+    });
 
+console.log(sortedSlides)
 
 // add title slide
 
