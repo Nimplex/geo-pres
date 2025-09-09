@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 
@@ -24,6 +24,18 @@ const sortedSlides = slides
             : a.region.localeCompare(b.region, "pl")
     );
 
+
+// add title slide
+
+const credits = await readFile(join(dataDir, "credits.txt"), { encoding: "UTF8" });
+const titleSlide = presentation.addSlide();
+
+titleSlide.background = { color: "000000" };
+titleSlide.addText("Miasta Polski", { w: "100%", h: "100%", align: "center", color: "FFFFFF" });
+titleSlide.addText(credits, { w: "100%", h: "100%", color: "FFFFFF" });
+
+// add the rest
+
 sortedSlides.forEach(({ filename }) => {
     presentation.addSlide().addImage({
         path: join(slidesDir, filename),
@@ -31,6 +43,8 @@ sortedSlides.forEach(({ filename }) => {
         h: "100%",
     });
 });
+
+// write & output
 
 await presentation.writeFile({
     fileName: presentationPath,
