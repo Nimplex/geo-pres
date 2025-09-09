@@ -59,7 +59,7 @@ fn generate_title(font: &Fonts, voivodeship: &str) -> AppResult<ImageBuffer<Rgba
 
     let text = format!("woj. {}", capitalize(voivodeship));
 
-    let (width, height) = text_size(PxScale::from(80.0), &font.bold, &text);
+    let (width, height) = text_size(PxScale::from(100.0), &font.bold, &text);
     let x = image.width() / 2 - width / 2;
     let y = image.height() / 2 - height / 2;
 
@@ -69,7 +69,7 @@ fn generate_title(font: &Fonts, voivodeship: &str) -> AppResult<ImageBuffer<Rgba
         &font.bold,
         x as i32,
         y as i32,
-        80.0,
+        100.0,
         Rgba([255, 255, 255, 255]),
     );
 
@@ -211,6 +211,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
     };
 
     let mut amount_ok = 0;
+    let mut slide_number = 0;
 
     for (voivodeship_idx, voivodeship) in dataset.iter().enumerate() {
         log!(
@@ -223,15 +224,34 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
             voivodeship.name
         );
 
+        slide_number += 1;
+
         let slide = generate_title(&fonts, &voivodeship.name)?;
-        let slide_filename = format!("{}.webp", voivodeship.name);
+        let slide_filename = format!("{}_{}.webp", amount_ok, voivodeship.name);
         let slide_path = paths.slides.join(slide_filename);
         slide.save_with_format(slide_path, ImageFormat::WebP)?;
 
         for (slide_index, city_chunk) in voivodeship.content.chunks(4).enumerate() {
-            let slide_filename = format!("{}_{}.webp", voivodeship.name, slide_index);
+            slide_number += 1;
+
+            let mut slide = generate_slide(paths, &fonts, &icons, city_chunk)?;
+            // add slide numbers
+            let slide_number_str = slide_number.to_string();
+            let (width, height) = text_size(PxScale::from(48.0), &fonts.bold, &slide_number_str);
+            let x = slide.width() - width - 32;
+            let y = slide.height() - height - 32;
+            draw_text(
+                &mut slide,
+                &slide_number_str,
+                &fonts.regular,
+                x as i32,
+                y as i32,
+                48.0,
+                Rgba([255, 255, 255, 255]),
+            );
+
+            let slide_filename = format!("{}_{}_{}.webp", amount_ok, voivodeship.name, slide_index);
             let slide_path = paths.slides.join(slide_filename);
-            let slide = generate_slide(paths, &fonts, &icons, city_chunk)?;
             slide.save_with_format(slide_path, ImageFormat::WebP)?;
 
             log!(
@@ -273,7 +293,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
         Rgba([255, 255, 255, 255]),
     );
 
-    (width, height) = text_size(PxScale::from(48.0), &fonts.bold, &credits);
+    (width, height) = text_size(PxScale::from(32.0), &fonts.regular, &credits);
     x = image.width() - 32 - width;
     y = image.height() - 32 - height;
 
@@ -283,7 +303,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
         &fonts.regular,
         x as i32,
         y as i32,
-        48.0,
+        32.0,
         Rgba([255, 255, 255, 255]),
     );
 
