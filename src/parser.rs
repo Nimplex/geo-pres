@@ -4,7 +4,7 @@ use crate::{
     utils::{AppError, AppResult},
 };
 use regex::Regex;
-use std::{io, num::ParseIntError, path::Path, cmp::Reverse};
+use std::{cmp::Reverse, io, num::ParseIntError, path::Path};
 
 pub const VOIVODESHIP_COUNT: usize = 16;
 const DATA_COLUMNS: usize = 7;
@@ -103,12 +103,20 @@ pub fn parse_csv(path: &Path) -> AppResult<[Voivodeship; VOIVODESHIP_COUNT]> {
 
     let mut dataset: [Voivodeship; VOIVODESHIP_COUNT] = dataset.map(|x| {
         let mut value = x.unwrap();
-        value.content.sort_by_key(|city| Reverse(city.total_population));
+        value
+            .content
+            .sort_by_key(|city| Reverse(city.total_population));
         value
     });
 
     dataset.sort_by_key(|value| {
-        Reverse(value.content.iter().map(|city| city.total_population).sum::<u64>())
+        Reverse(
+            value
+                .content
+                .iter()
+                .map(|city| city.total_population)
+                .sum::<u64>(),
+        )
     });
 
     Ok(dataset)
