@@ -11,6 +11,7 @@ pub struct Paths {
     pub slides: PathBuf,
     pub fonts: PathBuf,
     pub icons: PathBuf,
+    pub data: PathBuf,
 }
 
 pub fn workspace_root() -> AppResult<PathBuf> {
@@ -43,6 +44,7 @@ impl Paths {
             slides: data.join("slides"),
             fonts: data.join("fonts"),
             icons: data.join("icons"),
+            data: data,
         })
     }
 }
