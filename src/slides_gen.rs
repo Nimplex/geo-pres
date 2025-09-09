@@ -8,7 +8,7 @@ use crate::{
 use ab_glyph::{FontRef, PxScale};
 use image::{ImageBuffer, ImageFormat, Rgba, RgbaImage, imageops::overlay};
 use imageproc::drawing::{draw_text_mut, text_size};
-use std::fs::read;
+use std::fs::{read, File};
 
 struct Fonts<'a> {
     regular: FontRef<'a>,
@@ -59,7 +59,7 @@ fn generate_title(font: &Fonts, voivodeship: &str) -> AppResult<ImageBuffer<Rgba
 
     let text = format!("woj. {}", capitalize(voivodeship));
 
-    let (width, height) = text_size(PxScale::from(64.0), &font.bold, &text);
+    let (width, height) = text_size(PxScale::from(80.0), &font.bold, &text);
     let x = image.width() / 2 - width / 2;
     let y = image.height() / 2 - height / 2;
 
@@ -244,6 +244,35 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
 
         amount_ok += 1;
     }
+
+    log!([LogStyle::Blue], "PRES GEN", "Generating title slide");
+   
+    let path = paths.data.join("credits.txt");
+
+    if !path.exists() {
+        File::create(&path)?;
+    }
+
+    let credits_raw = std::fs::read_to_string(path)?;
+    let credits = credits_raw.trim();
+
+    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
+    let text = "Miasta Polski";
+
+    let (mut width, mut height) = text_size(PxScale::from(180.0), &fonts.bold, &text);
+    let mut x = image.width() / 2 - width / 2;
+    let mut y = image.height() / 2 - height / 2;
+
+    draw_text(&mut image, &text, &fonts.bold, x as i32, y as i32, 180.0, Rgba([255, 255, 255, 255]));
+
+    (width, height) = text_size(PxScale::from(48.0), &fonts.bold, &credits);
+    x = image.width() - 32 - width;
+    y = image.height() - 32 - height;
+
+    draw_text(&mut image, &credits, &fonts.regular, x as i32, y as i32, 48.0, Rgba([255, 255, 255, 255]));
+
+    let slide_path = paths.slides.join("title.webp");
+    image.save_with_format(slide_path, ImageFormat::WebP)?;
 
     Ok(ReturnReport {
         job_name: "PRES GEN".into(),

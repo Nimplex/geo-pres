@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import pptxgen from "pptxgenjs";
 
@@ -18,6 +18,7 @@ const sortedSlides = slides
             filename: file,
         };
     })
+    .filter(x => x !== "title.webp")
     .sort((a, b) =>
         a.region === b.region
             ? a.index - b.index
@@ -27,12 +28,12 @@ const sortedSlides = slides
 
 // add title slide
 
-const credits = await readFile(join(dataDir, "credits.txt"), { encoding: "UTF8" });
 const titleSlide = presentation.addSlide();
-
-titleSlide.background = { color: "000000" };
-titleSlide.addText("Miasta Polski", { w: "100%", h: "100%", align: "center", color: "FFFFFF" });
-titleSlide.addText(credits, { w: "100%", h: "100%", color: "FFFFFF" });
+titleSlide.addImage({
+    path: join(slidesDir, "title.webp"),
+    w: "100%",
+    h: "100%",
+});
 
 // add the rest
 
