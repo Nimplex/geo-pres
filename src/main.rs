@@ -16,11 +16,9 @@ mod scraper;
 mod slides_gen;
 mod utils;
 
-fn display_dataset(dataset: &[Voivodeship]) {
-    log!(
-        [LogStyle::Blue],
-        "TABLE",
-        "{:<24} {:<25} {:<25} {:>15} {:>15}",
+fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
+    let table_header = format!(
+        "{:<20} {:<24} {:<24} {:>10} {:>10}",
         "Voivodeship",
         "City",
         "Powiat",
@@ -28,20 +26,25 @@ fn display_dataset(dataset: &[Voivodeship]) {
         "Area (km²)"
     );
 
+    let mut rows = Vec::with_capacity(1100);
+    rows.push(table_header);
+
     for voivodeship in dataset.iter() {
         for city in &voivodeship.content {
-            log!(
-                [LogStyle::Blue],
-                "TABLE",
-                "{:<24} {:<25} {:<25} {:>15} {:>15}",
-                voivodeship.name,
-                city.name,
-                city.powiat,
-                city.total_population,
-                city.area_km
+            rows.push(
+                format!(
+                    "{:<20} {:<24} {:<24} {:>10} {:>10}",
+                    voivodeship.name,
+                    city.name,
+                    city.powiat,
+                    city.total_population,
+                    city.area_km
+                )
             );
         }
     }
+
+    std::fs::write(&paths.data.join("skrypt.txt"), rows.join("\n")).expect("Couldn't save skrypt.txt");
 }
 
 #[tokio::main]
@@ -49,7 +52,7 @@ async fn main() -> AppResult<()> {
     let paths = Paths::new()?;
 
     let dataset = parse_csv(&paths.dataset)?;
-    display_dataset(&dataset);
+    display_dataset(&paths, &dataset);
 
     let (scraper_report, links) = get_links(&paths, &dataset).await?;
     log!([LogStyle::Purple], "JOB DONE", "{scraper_report}");
