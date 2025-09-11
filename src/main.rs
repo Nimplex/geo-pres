@@ -18,33 +18,41 @@ mod utils;
 
 fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
     let table_header = format!(
-        "{:<20} {:<24} {:<24} {:>10} {:>10}",
-        "Voivodeship",
-        "City",
-        "Powiat",
-        "Population",
-        "Area (km²)"
+        "{:<24} {:<25} {:>10} {:>10}",
+        "City", "Powiat", "Population", "Area (km²)"
     );
 
     let mut rows = Vec::with_capacity(1100);
     rows.push(table_header);
 
     for voivodeship in dataset.iter() {
+        let total_width: usize = 72;
+        let name = &voivodeship.name;
+
+        let space = total_width.saturating_sub(name.chars().count());
+        let left = space / 2;
+        let right = space - left;
+
+        let line = format!(
+            "{:=<left$}{}{:=<right$}",
+            "",
+            name,
+            "",
+            left = left,
+            right = right
+        );
+        rows.push(line);
+
         for city in &voivodeship.content {
-            rows.push(
-                format!(
-                    "{:<20} {:<24} {:<24} {:>10} {:>10}",
-                    voivodeship.name,
-                    city.name,
-                    city.powiat,
-                    city.total_population,
-                    city.area_km
-                )
-            );
+            rows.push(format!(
+                "{:<24} {:<25} {:>10} {:>10}",
+                city.name, city.powiat, city.total_population, city.area_km
+            ));
         }
     }
 
-    std::fs::write(&paths.data.join("skrypt.txt"), rows.join("\n")).expect("Couldn't save skrypt.txt");
+    std::fs::write(&paths.data.join("skrypt.txt"), rows.join("\n"))
+        .expect("Couldn't save skrypt.txt");
 }
 
 #[tokio::main]
