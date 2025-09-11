@@ -22,7 +22,16 @@ fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
         "City", "Powiat", "Population", "Area (km²)"
     );
 
-    let mut rows = Vec::with_capacity(1100);
+    let iteratable_dataset = dataset.into_iter();
+    let voivodeship_count = iteratable_dataset.len();
+    let cities_count = iteratable_dataset.map(|voivode| voivode.content.len()).sum::<usize>();
+    let total_size = voivodeship_count + cities_count + 1; // every voivodeship is separated with
+                                                           // a ===...[name]...=== line so we have
+                                                           // to account for that in total size
+                                                           // `voivodeship_count`. There's
+                                                           // also one row for every city
+                                                           // `cities_count` and 1 row for header.
+    let mut rows = Vec::with_capacity(total_size);
     rows.push(table_header);
 
     for voivodeship in dataset.iter() {
