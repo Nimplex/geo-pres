@@ -47,6 +47,6 @@ pub(crate) fn log_msg<const N: usize>(colors: [LogStyle; N], prefix: &str, messa
 #[macro_export]
 macro_rules! log {
     ($colors:expr, $prefix:expr, $($arg:tt)*) => {
-        log_msg($colors, $prefix, format!("{}", format_args!($($arg)*)))
+        log_msg($colors, $prefix, format_args!($($arg)*).to_string())
     };
 }
