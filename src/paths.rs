@@ -27,7 +27,7 @@ pub fn workspace_root() -> AppResult<PathBuf> {
 
     Err(AppError::Io(io::Error::new(
         io::ErrorKind::NotFound,
-        "couldn't find Cargo.lock in the working directory nor in it's parents",
+        "couldn't find Cargo.lock in the working directory nor in its parents",
     )))
 }
 
@@ -44,7 +44,7 @@ impl Paths {
             slides: data.join("slides"),
             fonts: data.join("fonts"),
             icons: data.join("icons"),
-            data: data,
+            data,
         })
     }
 }
