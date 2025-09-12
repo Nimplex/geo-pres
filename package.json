@@ -1,7 +1,6 @@
 {
-  "name": "pres_gen",
+  "name": "geo-pres",
   "private": true,
-  "main": "main.ts",
   "devDependencies": {
     "@types/bun": "latest"
   },

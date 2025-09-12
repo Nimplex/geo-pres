@@ -81,7 +81,7 @@ async fn main() -> AppResult<()> {
     log!(
         [LogStyle::Bold],
         "FINISHED",
-        "Now run '{}bun run pres_gen/main.ts{}' to compile presentation",
+        "Now run '{}bun run scripts/generate.ts{}' to compile presentation",
         LogStyle::Bold,
         LogStyle::Clear,
     );
