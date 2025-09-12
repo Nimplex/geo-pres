@@ -18,7 +18,7 @@ mod utils;
 
 fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
     let table_header = format!(
-        "{:<23} {:<24} {:>10}   {:>10}",
+        "{:<23} {:<24} {:>10} {:>12}",
         "City", "Powiat", "Population", "Area (km²)"
     );
 
@@ -38,7 +38,7 @@ fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
 
         for city in &voivodeship.content {
             rows.push(format!(
-                "{:<23} {:<24} {:>10}   {:>10}",
+                "{:<23} {:<24} {:>10} {:>12}",
                 city.name, city.powiat, city.total_population, city.area_km
             ));
         }
