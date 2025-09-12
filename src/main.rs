@@ -18,49 +18,33 @@ mod utils;
 
 fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
     let table_header = format!(
-        "{:<24} {:<25} {:>10} {:>10}",
+        "{:<23} {:<24} {:>10}   {:>10}",
         "City", "Powiat", "Population", "Area (km²)"
     );
 
-    let iteratable_dataset = dataset.into_iter();
-    let voivodeship_count = iteratable_dataset.len();
-    let cities_count = iteratable_dataset.map(|voivode| voivode.content.len()).sum::<usize>();
-    let total_size = voivodeship_count + cities_count + 1; // every voivodeship is separated with
-                                                           // a ===...[name]...=== line so we have
-                                                           // to account for that in total size
-                                                           // `voivodeship_count`. There's
-                                                           // also one row for every city
-                                                           // `cities_count` and 1 row for header.
+    let voivodeship_count = dataset.len();
+    let cities_count: usize = dataset.iter().map(|v| v.content.len()).sum();
+
+    // voivodeship headers + city data + main header
+    let total_size = voivodeship_count + cities_count + 1;
     let mut rows = Vec::with_capacity(total_size);
     rows.push(table_header);
 
     for voivodeship in dataset.iter() {
-        let total_width: usize = 72;
-        let name = &voivodeship.name;
+        let name = format!("[ {} ]", &voivodeship.name);
+        let line = format!("{name:=^72}");
 
-        let space = total_width.saturating_sub(name.chars().count());
-        let left = space / 2;
-        let right = space - left;
-
-        let line = format!(
-            "{:=<left$}{}{:=<right$}",
-            "",
-            name,
-            "",
-            left = left,
-            right = right
-        );
         rows.push(line);
 
         for city in &voivodeship.content {
             rows.push(format!(
-                "{:<24} {:<25} {:>10} {:>10}",
+                "{:<23} {:<24} {:>10}   {:>10}",
                 city.name, city.powiat, city.total_population, city.area_km
             ));
         }
     }
 
-    std::fs::write(&paths.data.join("skrypt.txt"), rows.join("\n"))
+    std::fs::write(paths.data.join("skrypt.txt"), rows.join("\n"))
         .expect("Couldn't save skrypt.txt");
 }
 
