@@ -1,0 +1,23 @@
+#! Podział administracyjny Polski
+
+W Polsce struktura administracyjna jest trójstopniowa: województwo → powiat → gmina.
+
+#? define_layout 50 50
+
+#? align 1
+Powiaty dzielą się na:
+* ziemskie (obejmujące kilka gmin)
+* grodzkie (miasta na prawach powiatu).
+
+#? align 2
+Gminy mogą być:
+* miejskie, 
+* miejsko-wiejskie (miasto + otaczające wsie)
+* wiejskie.
+
+---
+
+#! Statystyki
+
+W Polsce obecnie jest {city_count} miast. 
+
