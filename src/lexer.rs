@@ -1,85 +1,83 @@
+use std::{convert::Infallible, str::FromStr};
+
 #[derive(Debug)]
-enum Token<'a> {
-    Special(&'a str), // #? statements
-    String(&'a str),
+pub enum ParserError {
+    InvalidCommand,
+    InvalidLineAmount { expected: usize, got: usize },
+    InvalidArguments { expected: String, got: String },
+    NoInput,
 }
 
-struct Lexer<'a> {
-    input: &'a str,
-    pos: usize,
+#[derive(Debug)]
+pub enum Arg<'a> {
+    Str(&'a str),
+    Num(i32),
 }
 
-impl<'a> Lexer<'a> {
-    fn new(input: &'a str) -> Self {
-        Lexer { input, pos: 0 }
+pub type Arguments<'a> = Vec<Arg<'a>>;
+
+#[derive(Debug)]
+pub enum CommandType {
+    Head,
+    DefineLayout,
+    Align,
+}
+
+pub trait ToArg<'a> {
+    fn to_arg(&self) -> Arg<'a>;
+}
+
+impl<'a> ToArg<'a> for &'a str {
+    fn to_arg(&self) -> Arg<'a> {
+        self.parse::<i32>().map_or(Arg::Str(self), Arg::Num)
     }
+}
 
-    fn peek_char(&self) -> Option<char> {
-        self.input[self.pos..].chars().next()
-    }
+impl FromStr for CommandType {
+    type Err = ParserError;
 
-    fn read_char(&mut self) -> Option<char> {
-        let c = self.peek_char()?;
-        self.pos += c.len_utf8();
-        Some(c)
-    }
-
-    pub fn next_token(&mut self) -> Option<Token<'a>> {
-        while let Some(chr) = self.read_char() {
-            match chr {
-                '#' => match self.peek_char() {
-                    Some('?') => {
-                        let start = self.pos - chr.len_utf8();
-                        self.read_char(); // consume '?'
-
-                        while let Some(next) = self.peek_char() {
-                            if next == '\n' {
-                                break;
-                            }
-                            self.read_char();
-                        }
-
-                        let slice = &self.input[start..self.pos];
-                        return Some(Token::Special(slice));
-                    }
-                    _ => {
-                        let line_start =
-                            self.pos == 1 || self.input[..self.pos - 1].ends_with('\n');
-                        if line_start {
-                            while let Some(next) = self.peek_char() {
-                                if next == '\n' {
-                                    break;
-                                }
-                                self.read_char();
-                            }
-                            continue;
-                        } else {
-                            let start = self.pos - chr.len_utf8();
-                            while let Some(next) = self.peek_char() {
-                                if next == '\n' {
-                                    break;
-                                }
-                                self.read_char();
-                            }
-                            let slice = &self.input[start..self.pos];
-                            return Some(Token::String(slice));
-                        }
-                    }
-                },
-                '\n' => continue,
-                _ => {
-                    let start = self.pos - chr.len_utf8();
-                    while let Some(next) = self.peek_char() {
-                        if next == '\n' {
-                            break;
-                        }
-                        self.read_char();
-                    }
-                    let slice = &self.input[start..self.pos];
-                    return Some(Token::String(slice));
-                }
-            }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "head" => Ok(CommandType::Head),
+            "define_layout" => Ok(CommandType::DefineLayout),
+            "align" => Ok(CommandType::Align),
+            _ => Err(ParserError::InvalidCommand),
         }
-        None
     }
 }
+
+#[derive(Debug)]
+pub enum Statement<'a> {
+    Command(CommandType, Arguments<'a>), // #? statements
+    Text(&'a str),
+}
+
+pub struct Parser;
+
+impl Parser {
+    pub fn parse_line(input: &str) -> Result<Statement<'_>, ParserError> {
+        let count = input.lines().count();
+        if count != 1 {
+            return Err(ParserError::InvalidLineAmount {
+                expected: 1,
+                got: count,
+            });
+        };
+
+        if input.starts_with("#?") {
+            let cmd: Vec<&str> = input.split_whitespace().skip(1).collect();
+
+            let Some((&first, rest)) = cmd.split_first() else {
+                return Err(ParserError::NoInput);
+            };
+
+            let as_command: CommandType = first.parse()?;
+            let args: Arguments = rest.iter().map(|&x| x.to_arg()).collect();
+
+            return Ok(Statement::Command(as_command, args));
+        }
+
+        Ok(Statement::Text(input.trim()))
+    }
+}
+
