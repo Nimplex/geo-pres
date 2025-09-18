@@ -15,6 +15,7 @@ mod paths;
 mod scraper;
 mod slides_gen;
 mod utils;
+mod lexer;
 
 fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
     let table_header = format!(
