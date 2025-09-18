@@ -1,16 +1,16 @@
 #[derive(Debug)]
-enum Token<'s> {
-    Special(&'s str), // #? statements
-    String(&'s str),
+enum Token<'a> {
+    Special(&'a str), // #? statements
+    String(&'a str),
 }
 
-struct Lexer<'s> {
-    input: &'s str,
+struct Lexer<'a> {
+    input: &'a str,
     pos: usize,
 }
 
-impl<'s> Lexer<'s> {
-    fn new(input: &'s str) -> Self {
+impl<'a> Lexer<'a> {
+    fn new(input: &'a str) -> Self {
         Lexer { input, pos: 0 }
     }
 
@@ -24,7 +24,7 @@ impl<'s> Lexer<'s> {
         Some(c)
     }
 
-    pub fn next_token(&mut self) -> Option<Token<'s>> {
+    pub fn next_token(&mut self) -> Option<Token<'a>> {
         while let Some(chr) = self.read_char() {
             match chr {
                 '#' => match self.peek_char() {
