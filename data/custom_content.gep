@@ -1,4 +1,4 @@
-#! Podział administracyjny Polski
+#? head Podział administracyjny Polski
 
 W Polsce struktura administracyjna jest trójstopniowa: województwo → powiat → gmina.
 
@@ -17,7 +17,7 @@ Gminy mogą być:
 
 ---
 
-#! Statystyki
+#? head Satystyki
 
 W Polsce obecnie jest {city_count} miast. 
 
