@@ -2,6 +2,7 @@ use crate::{
     image_editor::process_assets,
     logger::{LogStyle, log_msg},
     parser::{Voivodeship, parse_csv},
+    lexer::Parser,
     paths::Paths,
     scraper::{download_assets, get_links},
     slides_gen::generate_slides,
@@ -52,6 +53,14 @@ fn display_dataset(paths: &Paths, dataset: &[Voivodeship]) {
 #[tokio::main]
 async fn main() -> AppResult<()> {
     let paths = Paths::new()?;
+
+    let content = std::fs::read_to_string(paths.data.join("custom_content.gep"))?;
+    println!("{content}");
+
+    let out = Parser::parse_file(&content).unwrap();
+    println!("{:#?}", out);
+
+    return Ok(());
 
     let dataset = parse_csv(&paths.dataset)?;
     display_dataset(&paths, &dataset);
