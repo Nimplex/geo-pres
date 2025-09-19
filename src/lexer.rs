@@ -1,4 +1,4 @@
-use std::{convert::Infallible, str::FromStr};
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub enum ParserError {
@@ -79,5 +79,13 @@ impl Parser {
 
         Ok(Statement::Text(input.trim()))
     }
-}
 
+    pub fn parse_file(input: &str) -> Result<Vec<Statement<'_>>, ParserError> {
+        input
+            .trim()
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(Parser::parse_line)
+            .collect()
+    }
+}
