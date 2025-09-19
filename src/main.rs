@@ -10,7 +10,6 @@ use crate::{
 };
 
 mod image_editor;
-mod lexer;
 mod logger;
 mod parser;
 mod paths;
