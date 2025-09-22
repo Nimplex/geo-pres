@@ -7,5 +7,6 @@ data/backgrounds
 data/slides
 data/edited-backgrounds
 data/edited-coats-of-arms
+data/voivodeships/*_transparent.png
 target/
 node_modules
