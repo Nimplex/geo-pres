@@ -1,9 +1,10 @@
-
 $magick = Get-Command magick -ErrorAction SilentlyContinue
 if (-not $magick) {
     Write-Host "ImageMagick installation failed or magick not in PATH."
     exit 1
 }
+
+$fuzz = "10%"  # or whatever fuzz you need
 
 Get-ChildItem -Filter *.png | ForEach-Object {
     $file = $_.FullName
