@@ -85,8 +85,8 @@ pub fn parse_csv(path: &Path) -> AppResult<[Voivodeship; VOIVODESHIP_COUNT]> {
             };
 
             dataset[current_voivodeship as usize] = Some(Voivodeship {
-                name: dbg!(caps[1].to_lowercase()),
-                area_ha: dbg!(parts[3].parse()?),
+                name: caps[1].to_lowercase(),
+                area_ha: parts[3].parse()?,
                 area_km: parts[4].parse()?,
                 total_population: parts[5].parse()?,
                 population_per_km: parts[6].parse()?,
