@@ -358,7 +358,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
             draw_text(
                 &mut slide,
                 &slide_number_str,
-                &fonts.regular,
+                &fonts.bold,
                 x as i32,
                 y as i32,
                 48.0,
