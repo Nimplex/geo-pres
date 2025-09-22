@@ -410,7 +410,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
         x as i32,
         y as i32,
         140.0,
-        Rgba([255, 255, 255, 255]),
+        Rgba([240, 240, 240, 255]),
     );
 
     let (width, height) = text_size(PxScale::from(32.0), &fonts.regular, credits);
