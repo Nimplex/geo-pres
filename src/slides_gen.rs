@@ -399,7 +399,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
     let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
     let text = "Podział Administracyjny Polski";
 
-    let (width, height) = text_size(PxScale::from(180.0), &fonts.bold, text);
+    let (width, height) = text_size(PxScale::from(140.0), &fonts.bold, text);
     let x = image.width() / 2 - width / 2;
     let y = image.height() / 2 - height / 2;
 
@@ -409,7 +409,7 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
         &fonts.bold,
         x as i32,
         y as i32,
-        180.0,
+        140.0,
         Rgba([255, 255, 255, 255]),
     );
 
