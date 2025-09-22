@@ -1,0 +1,6 @@
+The dataset for the program has already been prepared by our team. It combines data from the source file in the source directory. The data was downloaded from the official statistics site: https://stat.gov.pl/obszary-tematyczne/ludnosc/ludnosc/powierzchnia-i-ludnosc-w-przekroju-terytorialnym-w-2024-roku,7,21.html.
+
+The dataset layout is as follows:
+
+,VOIVODESHIP_NAME,CITY_COUNT,AREA_HA,AREA_KM,TOTAL_POPULATION,POPULATION_PER_KM,,,,
+id, name, powiat, area_ha, area_km, total_population, population_per_km
