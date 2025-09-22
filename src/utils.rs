@@ -1,5 +1,5 @@
 use crate::{logger::LogStyle, parser::City};
-use std::{fs, io, path::Path};
+use std::{fs, io, num::ParseIntError, path::Path};
 
 macro_rules! join_error {
     ($visibility: vis enum $name: ident { $($memb: ident($err: ty)),* $(,)?}) => {
@@ -37,6 +37,7 @@ join_error! {
         Io(io::Error),
         Request(reqwest::Error),
         InvalidFont(ab_glyph::InvalidFont),
+        ParseIntError(ParseIntError),
         Other(String),
     }
 }

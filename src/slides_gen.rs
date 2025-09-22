@@ -16,6 +16,7 @@ struct Fonts<'a> {
 }
 
 struct Icons {
+    home: ImageBuffer<Rgba<u8>, Vec<u8>>, 
     population: ImageBuffer<Rgba<u8>, Vec<u8>>,
     area: ImageBuffer<Rgba<u8>, Vec<u8>>,
 }
@@ -71,6 +72,113 @@ fn generate_title(font: &Fonts, voivodeship: &str) -> AppResult<ImageBuffer<Rgba
         y as i32,
         100.0,
         Rgba([255, 255, 255, 255]),
+    );
+
+    Ok(image)
+}
+
+fn generate_map_slide(
+    paths: &Paths,
+    font: &Fonts,
+    icons: &Icons,
+    voivodeship: &Voivodeship,
+) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    const PADDING: u32 = 64;
+
+    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
+
+    let map_path = paths
+        .maps
+        .join(format!("{}_transparent.png", voivodeship.name));
+    let mut map = image::open(map_path)?;
+    let (map_width, map_height) = image.dimensions();
+    let aspect_ratio = map_width / map_height;
+    let new_height = aspect_ratio * 1080 - (PADDING * 2);
+    let new_width = new_height * aspect_ratio;
+    map = map.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3);
+    overlay(&mut image, &map.to_rgba8(), PADDING.into(), PADDING.into());
+
+    let mut text_offset: (u32, u32) = (PADDING * 3 + new_width, PADDING * 2);
+
+    let text = format!("woj. {}", capitalize(&voivodeship.name));
+    let stat_size = text_size(PxScale::from(80.0), &font.bold, &text);
+    draw_text(
+        &mut image,
+        &text,
+        &font.bold,
+        text_offset.0 as i32,
+        text_offset.1 as i32,
+        80.0,
+        Rgba([255, 255, 255, 255]),
+    );
+    text_offset.1 = text_offset.1 + stat_size.1 + 64;
+
+    let city_count = voivodeship.content.len();
+    let text = format!("{city_count} miast");
+    let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
+    let home_icon_y =
+        text_offset.1 as i32 + (stat_size.1 as i32 / 2);
+
+    draw_text(
+        &mut image,
+        &text,
+        &font.regular,
+        text_offset.0 as i32 + icons.home.width() as i32 + 16,
+        text_offset.1 as i32,
+        64.0,
+        Rgba([255, 255, 255, 255]),
+    );
+    overlay(
+        &mut image,
+        &icons.home,
+        text_offset.0 as i64,
+        home_icon_y as i64,
+    );
+
+    text_offset.1 = text_offset.1 + stat_size.1 + 64;
+
+    let text = format!("{} ({}/km²)", voivodeship.total_population, voivodeship.population_per_km);
+    let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
+    let population_icon_y =
+        text_offset.1 as i32 + (stat_size.1 as i32 / 2);
+
+    draw_text(
+        &mut image,
+        &text,
+        &font.regular,
+        text_offset.0 as i32 + icons.population.width() as i32 + 16,
+        text_offset.1 as i32,
+        64.0,
+        Rgba([255, 255, 255, 255]),
+    );
+    overlay(
+        &mut image,
+        &icons.population,
+        text_offset.0 as i64,
+        population_icon_y as i64,
+    );
+
+    text_offset.1 = text_offset.1 + stat_size.1 + 64;
+
+    let text = format!("{} km² ({} ha)", voivodeship.area_km, voivodeship.area_ha);
+    let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
+    let area_icon_y =
+        text_offset.1 as i32 - (icons.area.height() as i32 / 2) + (stat_size.1 as i32 / 2);
+
+    draw_text(
+        &mut image,
+        &text,
+        &font.regular,
+        text_offset.0 as i32 + icons.area.width() as i32 + 16,
+        text_offset.1 as i32,
+        64.0,
+        Rgba([255, 255, 255, 255]),
+    );
+    overlay(
+        &mut image,
+        &icons.area,
+        text_offset.0 as i64,
+        area_icon_y as i64,
     );
 
     Ok(image)
@@ -202,10 +310,12 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
 
     log!([LogStyle::Blue], "PRES GEN", "Loading icons...");
 
+    let home_icon = image::open(paths.icons.join("home.png"))?;
     let area_icon = image::open(paths.icons.join("area.png"))?;
     let population_icon = image::open(paths.icons.join("population.png"))?;
 
     let icons = Icons {
+        home: home_icon.to_rgba8(),
         area: area_icon.to_rgba8(),
         population: population_icon.to_rgba8(),
     };
@@ -231,6 +341,11 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
         let slide_path = paths.slides.join(slide_filename);
         slide.save_with_format(slide_path, ImageFormat::WebP)?;
 
+        let slide = generate_map_slide(&paths, &fonts, &icons, &voivodeship)?;
+        let slide_filename = format!("{}_{}_0.webp", amount_ok, voivodeship.name);
+        let slide_path = paths.slides.join(slide_filename);
+        slide.save_with_format(slide_path, ImageFormat::WebP)?;
+
         for (slide_index, city_chunk) in voivodeship.content.chunks(4).enumerate() {
             slide_number += 1;
 
@@ -250,7 +365,12 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
                 Rgba([255, 255, 255, 255]),
             );
 
-            let slide_filename = format!("{}_{}_{}.webp", amount_ok, voivodeship.name, slide_index);
+            let slide_filename = format!(
+                "{}_{}_{}.webp",
+                amount_ok,
+                voivodeship.name,
+                slide_index + 1
+            );
             let slide_path = paths.slides.join(slide_filename);
             slide.save_with_format(slide_path, ImageFormat::WebP)?;
 

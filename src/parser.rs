@@ -42,6 +42,10 @@ impl TryFrom<([&str; DATA_COLUMNS], String)> for City {
 
 pub struct Voivodeship {
     pub name: String,
+    pub area_ha: u64,
+    pub area_km: u64,
+    pub total_population: u64,
+    pub population_per_km: u64,
     pub content: Vec<City>,
 }
 
@@ -81,7 +85,11 @@ pub fn parse_csv(path: &Path) -> AppResult<[Voivodeship; VOIVODESHIP_COUNT]> {
             };
 
             dataset[current_voivodeship as usize] = Some(Voivodeship {
-                name: caps[1].to_lowercase(),
+                name: dbg!(caps[1].to_lowercase()),
+                area_ha: dbg!(parts[3].parse()?),
+                area_km: parts[4].parse()?,
+                total_population: parts[5].parse()?,
+                population_per_km: parts[6].parse()?,
                 content: vec![],
             });
             continue;
