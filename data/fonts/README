@@ -1,0 +1,3 @@
+I've pre-baked lining feature to the font
+
+pyftfeatfreeze -f "lnum" BonaNova-Bold.ttf BonaNova-Bold-Lining.ttf
