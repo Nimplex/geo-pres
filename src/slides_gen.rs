@@ -16,7 +16,7 @@ struct Fonts<'a> {
 }
 
 struct Icons {
-    home: ImageBuffer<Rgba<u8>, Vec<u8>>, 
+    home: ImageBuffer<Rgba<u8>, Vec<u8>>,
     population: ImageBuffer<Rgba<u8>, Vec<u8>>,
     area: ImageBuffer<Rgba<u8>, Vec<u8>>,
 }
@@ -117,13 +117,13 @@ fn generate_map_slide(
     let text = format!("{city_count} miast");
     let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
     let home_icon_y =
-        text_offset.1 as i32 + (stat_size.1 as i32 / 2);
+        text_offset.1 as i32 - (icons.home.height() as i32 / 2) + (stat_size.1 as i32 / 2);
 
     draw_text(
         &mut image,
         &text,
         &font.regular,
-        text_offset.0 as i32 + icons.home.width() as i32 + 16,
+        text_offset.0 as i32 + icons.home.width() as i32 + 32,
         text_offset.1 as i32,
         64.0,
         Rgba([255, 255, 255, 255]),
@@ -137,16 +137,19 @@ fn generate_map_slide(
 
     text_offset.1 = text_offset.1 + stat_size.1 + 64;
 
-    let text = format!("{} ({}/km²)", voivodeship.total_population, voivodeship.population_per_km);
+    let text = format!(
+        "{} ({}/km²)",
+        voivodeship.total_population, voivodeship.population_per_km
+    );
     let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
     let population_icon_y =
-        text_offset.1 as i32 + (stat_size.1 as i32 / 2);
+        text_offset.1 as i32 - (icons.population.height() as i32 / 2) + (stat_size.1 as i32 / 2);
 
     draw_text(
         &mut image,
         &text,
         &font.regular,
-        text_offset.0 as i32 + icons.population.width() as i32 + 16,
+        text_offset.0 as i32 + icons.population.width() as i32 + 32,
         text_offset.1 as i32,
         64.0,
         Rgba([255, 255, 255, 255]),
@@ -169,7 +172,7 @@ fn generate_map_slide(
         &mut image,
         &text,
         &font.regular,
-        text_offset.0 as i32 + icons.area.width() as i32 + 16,
+        text_offset.0 as i32 + icons.area.width() as i32 + 32,
         text_offset.1 as i32,
         64.0,
         Rgba([255, 255, 255, 255]),
@@ -300,8 +303,8 @@ pub fn generate_slides(paths: &Paths, dataset: &[Voivodeship]) -> AppResult<Retu
 
     log!([LogStyle::Blue], "PRES GEN", "Loading fonts...");
 
-    let regular_font_data = read(paths.fonts.join("BonaNova-Regular.ttf"))?;
-    let bold_font_data = read(paths.fonts.join("BonaNova-Bold.ttf"))?;
+    let regular_font_data = read(paths.fonts.join("BonaNova-Regular-Lining.ttf"))?;
+    let bold_font_data = read(paths.fonts.join("BonaNova-Bold-Lining.ttf"))?;
 
     let fonts = Fonts {
         regular: FontRef::try_from_slice(&regular_font_data)?,
