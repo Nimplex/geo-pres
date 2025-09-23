@@ -84,21 +84,24 @@ fn generate_map_slide(
     voivodeship: &Voivodeship,
 ) -> AppResult<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     const PADDING: u32 = 64;
+    const DIMENSIONS: (u32, u32) = (1920, 1080);
 
-    let mut image = ImageBuffer::from_pixel(1920, 1080, Rgba([0, 0, 0, 255]));
+    let mut image = ImageBuffer::from_pixel(DIMENSIONS.0, DIMENSIONS.1, Rgba([0, 0, 0, 255]));
 
     let map_path = paths
         .maps
         .join(format!("{}_transparent.png", voivodeship.name));
+
     let mut map = image::open(map_path)?;
-    let (map_width, map_height) = image.dimensions();
-    let aspect_ratio = map_width / map_height;
-    let new_height = aspect_ratio * 1080 - (PADDING * 2);
-    let new_width = new_height * aspect_ratio;
-    map = map.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3);
+
+    const ASPECT_RATIO: u32 = DIMENSIONS.0 / DIMENSIONS.1;
+    const NEW_HEIGHT: u32 = ASPECT_RATIO * DIMENSIONS.1 - (PADDING * 2);
+    const NEW_WIDTH: u32 = NEW_HEIGHT * ASPECT_RATIO;
+
+    map = map.resize_exact(NEW_WIDTH, NEW_HEIGHT, image::imageops::FilterType::Lanczos3);
     overlay(&mut image, &map.to_rgba8(), PADDING.into(), PADDING.into());
 
-    let mut text_offset: (u32, u32) = (PADDING * 3 + new_width, PADDING * 2);
+    let mut text_offset: (u32, u32) = (PADDING * 3 + NEW_WIDTH, PADDING * 2);
 
     let text = format!("woj. {}", capitalize(&voivodeship.name));
     let stat_size = text_size(PxScale::from(80.0), &font.bold, &text);
@@ -111,13 +114,13 @@ fn generate_map_slide(
         80.0,
         Rgba([255, 255, 255, 255]),
     );
+
     text_offset.1 = text_offset.1 + stat_size.1 + 64;
 
     let city_count = voivodeship.content.len();
     let text = format!("{city_count} miast");
     let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
-    let home_icon_y =
-        text_offset.1 as i32 - (icons.home.height() as i32 / 2) + (stat_size.1 as i32 / 2);
+    let home_icon_y = text_offset.1 - (icons.home.height() / 2) + (stat_size.1 / 2);
 
     draw_text(
         &mut image,
@@ -142,8 +145,7 @@ fn generate_map_slide(
         voivodeship.total_population, voivodeship.population_per_km
     );
     let stat_size = text_size(PxScale::from(64.0), &font.regular, &text);
-    let population_icon_y =
-        text_offset.1 as i32 - (icons.population.height() as i32 / 2) + (stat_size.1 as i32 / 2);
+    let population_icon_y = text_offset.1 - (icons.population.height() / 2) + (stat_size.1 / 2);
 
     draw_text(
         &mut image,
